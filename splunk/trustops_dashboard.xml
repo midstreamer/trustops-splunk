@@ -1,0 +1,406 @@
+<dashboard version="1.1" theme="light">
+  <label>TrustOps — Synthetic Auth &amp; Decisions</label>
+  <description>Phase 1 dashboard for VPN/auth visibility and analyst decision telemetry.</description>
+
+  <row>
+    <panel>
+      <title>Suspicious authentication timeline</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index=trustops sourcetype="trustops:auth"
+| eval _is_header=if(match(_raw,"^timestamp,user,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<user>[^,]+),(?<src_ip>[^,]+),(?<dest_host>[^,]+),(?<action>[^,]+),(?<geo_country>[^,]+),(?<auth_method>[^,]+),(?<risk_score>\d+),(?<event_type>[^,]+),(?<alert_id>[^,]*),(?<scenario>[^,\r\n]+)"
+| where scenario="vpn_brute_then_geo_anomaly"
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| timechart span=5m count by action
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.legend.placement">right</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Failed login counts by user</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops sourcetype="trustops:auth"
+| eval _is_header=if(match(_raw,"^timestamp,user,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<user>[^,]+),(?<src_ip>[^,]+),(?<dest_host>[^,]+),(?<action>[^,]+),(?<geo_country>[^,]+),(?<auth_method>[^,]+),(?<risk_score>\d+),(?<event_type>[^,]+),(?<alert_id>[^,]*),(?<scenario>[^,\r\n]+)"
+| where action="failure"
+| stats count as failed_logins by user
+| sort - failed_logins
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+
+    <panel>
+      <title>Suspicious source IPs</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops sourcetype="trustops:auth"
+| eval _is_header=if(match(_raw,"^timestamp,user,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<user>[^,]+),(?<src_ip>[^,]+),(?<dest_host>[^,]+),(?<action>[^,]+),(?<geo_country>[^,]+),(?<auth_method>[^,]+),(?<risk_score>\d+),(?<event_type>[^,]+),(?<alert_id>[^,]*),(?<scenario>[^,\r\n]+)"
+| eval risk_score_num=tonumber(risk_score)
+| where risk_score_num>=40 OR scenario!="normal_baseline"
+| stats values(user) as users max(risk_score_num) as max_risk dc(geo_country) as geo_variety by src_ip
+| sort - max_risk
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Risk score by user</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index=trustops sourcetype="trustops:auth"
+| eval _is_header=if(match(_raw,"^timestamp,user,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<user>[^,]+),(?<src_ip>[^,]+),(?<dest_host>[^,]+),(?<action>[^,]+),(?<geo_country>[^,]+),(?<auth_method>[^,]+),(?<risk_score>\d+),(?<event_type>[^,]+),(?<alert_id>[^,]*),(?<scenario>[^,\r\n]+)"
+| stats max(tonumber(risk_score)) as max_risk_score by user
+| sort - max_risk_score
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.axisY.scale">linear</option>
+      </chart>
+    </panel>
+
+    <panel>
+      <title>Analyst decision telemetry summary</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| eval _cols=split(_raw,",")
+| eval _nf=mvcount(_cols)
+| eval ai_recommendation_status=mvindex(_cols,9)
+| eval confidence_score=tonumber(mvindex(_cols,6))
+| eval trust_score=tonumber(mvindex(_cols,7))
+| eval time_to_decision_seconds=tonumber(mvindex(_cols,8))
+| eval automation_bias_risk_score=tonumber(if(_nf>16,mvindex(_cols,16),null()))
+| stats count as decisions avg(confidence_score) as avg_confidence avg(trust_score) as avg_trust avg(time_to_decision_seconds) as avg_time_to_decision avg(automation_bias_risk_score) as avg_bias_risk by ai_recommendation_status
+| sort ai_recommendation_status
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Automation Bias Risk Summary</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| eval _cols=split(_raw,",")
+| eval _nf=mvcount(_cols)
+| eval analyst=mvindex(_cols,2)
+| eval automation_bias_risk_score=tonumber(if(_nf>16,mvindex(_cols,16),null()))
+| eval automation_bias_risk_level=if(_nf>17,mvindex(_cols,17),"")
+| where isnotnull(automation_bias_risk_score)
+| stats avg(automation_bias_risk_score) as avg_bias_risk count as decisions values(automation_bias_risk_level) as risk_levels by analyst
+| sort - avg_bias_risk
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Evidence Review Coverage</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| eval _cols=split(_raw,",")
+| eval _nf=mvcount(_cols)
+| eval evidence_reviewed_count=tonumber(mvindex(_cols,10))
+| eval evidence_checklist=if(_nf>13,mvindex(_cols,13),"")
+| eval has_checklist=if(len(evidence_checklist)>0,1,0)
+| stats avg(evidence_reviewed_count) as avg_evidence_count avg(has_checklist) as pct_with_checklist by analyst
+| sort - avg_evidence_count
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Trust Calibration Metrics (trust vs confidence)</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| eval _cols=split(_raw,",")
+| eval confidence_score=tonumber(mvindex(_cols,6))
+| eval trust_score=tonumber(mvindex(_cols,7))
+| eval ai_recommendation_status=mvindex(_cols,9)
+| eval trust_confidence_gap=trust_score-confidence_score
+| stats avg(confidence_score) as avg_confidence avg(trust_score) as avg_trust avg(trust_confidence_gap) as avg_gap count as decisions by ai_recommendation_status
+| sort ai_recommendation_status
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Decisions Needing Review (missing challenge evidence)</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| eval _cols=split(_raw,",")
+| eval _nf=mvcount(_cols)
+| eval timestamp=mvindex(_cols,0)
+| eval alert_id=mvindex(_cols,1)
+| eval analyst=mvindex(_cols,2)
+| eval supporting_evidence=if(_nf>14,mvindex(_cols,14),"")
+| eval contradicting_evidence=if(_nf>15,mvindex(_cols,15),"")
+| where len(supporting_evidence)=0 OR len(contradicting_evidence)=0
+| table timestamp alert_id analyst supporting_evidence contradicting_evidence
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">25</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Agentic workflow — steps by status</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=status output=status
+| stats count as steps by status
+| sort status
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Agentic workflow — avg duration by agent</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=agent_name output=agent_name
+| spath input=_raw path=duration_ms output=duration_ms
+| eval duration_ms=tonumber(duration_ms)
+| stats avg(duration_ms) as avg_duration_ms by agent_name
+| sort - avg_duration_ms
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Agentic workflow — tools used</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=tools_used output=tools_used
+| where len(tools_used)>0
+| eval tool=split(tools_used,"|")
+| mvexpand tool
+| stats count as uses by tool
+| sort - uses
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Agentic workflow — recent run IDs</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=timestamp output=timestamp
+| spath input=_raw path=run_id output=run_id
+| spath input=_raw path=alert_id output=alert_id
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| stats latest(_time) as last_step_time values(alert_id) as alert_id dc(agent_name) as agents by run_id
+| sort - last_step_time
+| head 20
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">20</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>MITRE ATT&amp;CK Mapping by Alert</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops_agent_runs sourcetype="trustops:agent_step" agent_name="MITRE ATT&CK Mapping Agent"
+| spath input=_raw path=alert_id output=alert_id
+| spath input=_raw path=mitre_techniques_flat output=mitre_techniques
+| spath input=_raw path=output_summary output=output_summary
+| where len(mitre_techniques)>0
+| stats latest(output_summary) as summary values(mitre_techniques) as techniques count as mapping_runs by alert_id
+| sort - mapping_runs
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Recent MITRE Mapping Agent Runs</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops_agent_runs sourcetype="trustops:agent_step" agent_name="MITRE ATT&CK Mapping Agent"
+| spath input=_raw path=timestamp output=timestamp
+| spath input=_raw path=run_id output=run_id
+| spath input=_raw path=alert_id output=alert_id
+| spath input=_raw path=status output=status
+| spath input=_raw path=tools_used output=tools_used
+| spath input=_raw path=output_summary output=output_summary
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| sort - _time
+| table _time run_id alert_id status tools_used output_summary
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">15</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>MITRE Mapping Coverage</title>
+      <single>
+        <search>
+          <query><![CDATA[
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=run_id output=run_id
+| spath input=_raw path=agent_name output=agent_name
+| eval has_mitre=if(agent_name="MITRE ATT&CK Mapping Agent", 1, 0)
+| stats max(has_mitre) as mitre_mapping_present by run_id
+| stats count as runs sum(mitre_mapping_present) as runs_with_mitre_mapping
+| eval coverage_pct=round(100 * runs_with_mitre_mapping / runs, 1)
+| fields coverage_pct runs_with_mitre_mapping runs
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="underLabel">% runs with MITRE step</option>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Canonical demo alert — analyst decisions (TO-VPN-2026-514)</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<alert_id>[^,]+),(?<analyst>[^,]+),(?<ai_recommendation>[^,]+),(?<analyst_decision>[^,]+),(?<final_severity>[^,]+),(?<confidence_score>\d+),(?<trust_score>\d+),(?<time_to_decision_seconds>\d+),(?<ai_recommendation_status>[^,]+),(?<evidence_reviewed_count>\d+),(?<sop_followed>[^,]+),(?<notes>[^\r\n]+)"
+| where alert_id="TO-VPN-2026-514"
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| sort _time
+| table _time analyst ai_recommendation analyst_decision final_severity confidence_score trust_score time_to_decision_seconds ai_recommendation_status evidence_reviewed_count sop_followed notes
+          ]]></query>
+          <earliest>-7d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="count">50</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>

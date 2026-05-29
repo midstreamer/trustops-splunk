@@ -1,0 +1,286 @@
+# TrustOps — core Splunk searches (Phase 1)
+#
+# Do not paste this entire file into Splunk Search at once: Splunk expects a
+# single pipeline. Copy one block below (from `index=` through the last line
+# of that block) into Search, or use the panels in splunk/trustops_dashboard.xml.
+#
+# Time range: use at least Last 7 days (demo timestamps are anchored in May 2026).
+
+# -----------------------------------------------------------------------------
+# Base: extract structured fields from synthetic CSV lines in _raw
+# (Use this stanza after `index=trustops sourcetype="trustops:auth"` if fields
+#  are not auto-extracted via props.conf.)
+# -----------------------------------------------------------------------------
+# index=trustops sourcetype="trustops:auth"
+# | eval _is_header=if(match(_raw,"^timestamp,user,"),1,0)
+# | where _is_header=0
+# | fields - _is_header
+# | rex field=_raw "^(?<timestamp>[^,]+),(?<user>[^,]+),(?<src_ip>[^,]+),(?<dest_host>[^,]+),(?<action>[^,]+),(?<geo_country>[^,]+),(?<auth_method>[^,]+),(?<risk_score>\d+),(?<event_type>[^,]+),(?<alert_id>[^,]*),(?<scenario>[^,\r\n]+)"
+
+# -----------------------------------------------------------------------------
+# 1) User authentication timeline
+# -----------------------------------------------------------------------------
+index=trustops sourcetype="trustops:auth"
+| eval _is_header=if(match(_raw,"^timestamp,user,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<user>[^,]+),(?<src_ip>[^,]+),(?<dest_host>[^,]+),(?<action>[^,]+),(?<geo_country>[^,]+),(?<auth_method>[^,]+),(?<risk_score>\d+),(?<event_type>[^,]+),(?<alert_id>[^,]*),(?<scenario>[^,\r\n]+)"
+| where user="jsmith"
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| sort _time
+| table _time user src_ip action geo_country auth_method risk_score event_type alert_id scenario
+
+# -----------------------------------------------------------------------------
+# 2) Failed-login burst detection (rolling window style — demo)
+# -----------------------------------------------------------------------------
+index=trustops sourcetype="trustops:auth"
+| eval _is_header=if(match(_raw,"^timestamp,user,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<user>[^,]+),(?<src_ip>[^,]+),(?<dest_host>[^,]+),(?<action>[^,]+),(?<geo_country>[^,]+),(?<auth_method>[^,]+),(?<risk_score>\d+),(?<event_type>[^,]+),(?<alert_id>[^,]*),(?<scenario>[^,\r\n]+)"
+| where action="failure" AND auth_method="vpn_saml"
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| bin _time span=15m
+| stats count as failed_logins dc(src_ip) as distinct_src by _time user
+| where failed_logins>=5
+
+# -----------------------------------------------------------------------------
+# 3) Suspicious login by alert_id
+# -----------------------------------------------------------------------------
+index=trustops sourcetype="trustops:auth"
+| eval _is_header=if(match(_raw,"^timestamp,user,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<user>[^,]+),(?<src_ip>[^,]+),(?<dest_host>[^,]+),(?<action>[^,]+),(?<geo_country>[^,]+),(?<auth_method>[^,]+),(?<risk_score>\d+),(?<event_type>[^,]+),(?<alert_id>[^,]*),(?<scenario>[^,\r\n]+)"
+| where alert_id="TO-VPN-2026-514"
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| sort _time
+| table _time user src_ip action geo_country risk_score event_type scenario
+
+# -----------------------------------------------------------------------------
+# 4) Source IP history
+# -----------------------------------------------------------------------------
+index=trustops sourcetype="trustops:auth"
+| eval _is_header=if(match(_raw,"^timestamp,user,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<user>[^,]+),(?<src_ip>[^,]+),(?<dest_host>[^,]+),(?<action>[^,]+),(?<geo_country>[^,]+),(?<auth_method>[^,]+),(?<risk_score>\d+),(?<event_type>[^,]+),(?<alert_id>[^,]*),(?<scenario>[^,\r\n]+)"
+| where src_ip="185.220.101.77"
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| sort _time
+| table _time user action geo_country auth_method risk_score event_type alert_id
+
+# -----------------------------------------------------------------------------
+# 5) Risk scoring by user (max observed risk_score in window)
+# -----------------------------------------------------------------------------
+index=trustops sourcetype="trustops:auth"
+| eval _is_header=if(match(_raw,"^timestamp,user,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<user>[^,]+),(?<src_ip>[^,]+),(?<dest_host>[^,]+),(?<action>[^,]+),(?<geo_country>[^,]+),(?<auth_method>[^,]+),(?<risk_score>\d+),(?<event_type>[^,]+),(?<alert_id>[^,]*),(?<scenario>[^,\r\n]+)"
+| eval risk_score_num=tonumber(risk_score)
+| stats max(risk_score_num) as max_risk_score dc(src_ip) as distinct_src_ips values(alert_id) as alert_ids by user
+| sort - max_risk_score
+
+# -----------------------------------------------------------------------------
+# 6) Analyst decision telemetry — verification / summary by AI outcome
+# Sample data: data/sample_decisions.csv (ingest: scripts/ingest_decisions.sh)
+# Canonical alert: TO-VPN-2026-514 (expect accepted / modified / rejected rows)
+# -----------------------------------------------------------------------------
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<alert_id>[^,]+),(?<analyst>[^,]+),(?<ai_recommendation>[^,]+),(?<analyst_decision>[^,]+),(?<final_severity>[^,]+),(?<confidence_score>\d+),(?<trust_score>\d+),(?<time_to_decision_seconds>\d+),(?<ai_recommendation_status>[^,]+),(?<evidence_reviewed_count>\d+),(?<sop_followed>[^,]+),(?<notes>[^\r\n]+)"
+| eval confidence_score=tonumber(confidence_score), trust_score=tonumber(trust_score), time_to_decision_seconds=tonumber(time_to_decision_seconds), evidence_reviewed_count=tonumber(evidence_reviewed_count)
+| stats count as decisions avg(confidence_score) as avg_confidence avg(trust_score) as avg_trust avg(time_to_decision_seconds) as avg_time_to_decision by ai_recommendation_status
+
+# -----------------------------------------------------------------------------
+# 6b) Decision rows for the canonical demo alert (TO-VPN-2026-514)
+# -----------------------------------------------------------------------------
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| rex field=_raw "^(?<timestamp>[^,]+),(?<alert_id>[^,]+),(?<analyst>[^,]+),(?<ai_recommendation>[^,]+),(?<analyst_decision>[^,]+),(?<final_severity>[^,]+),(?<confidence_score>\d+),(?<trust_score>\d+),(?<time_to_decision_seconds>\d+),(?<ai_recommendation_status>[^,]+),(?<evidence_reviewed_count>\d+),(?<sop_followed>[^,]+),(?<notes>[^\r\n]+)"
+| where alert_id="TO-VPN-2026-514"
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| sort _time
+| table _time analyst ai_recommendation analyst_decision final_severity confidence_score trust_score time_to_decision_seconds ai_recommendation_status evidence_reviewed_count sop_followed notes
+
+# -----------------------------------------------------------------------------
+# 7) Trust calibration — extended decision schema (split _raw; legacy rows OK; client_decision_id col 20; agentic view flags cols 21–23 when present)
+# -----------------------------------------------------------------------------
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| eval _cols=split(_raw,",")
+| eval _nf=mvcount(_cols)
+| eval analyst=mvindex(_cols,2)
+| eval ai_recommendation_status=mvindex(_cols,9)
+| eval automation_bias_risk_score=if(_nf>16,mvindex(_cols,16),"")
+| eval automation_bias_risk_level=if(_nf>17,mvindex(_cols,17),"")
+| eval automation_bias_risk_score=tonumber(automation_bias_risk_score)
+| where isnotnull(automation_bias_risk_score)
+| stats avg(automation_bias_risk_score) as avg_bias_risk count as decisions by analyst
+| sort - avg_bias_risk
+
+# -----------------------------------------------------------------------------
+# 8) Automation bias risk by ai_recommendation_status
+# -----------------------------------------------------------------------------
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| eval _cols=split(_raw,",")
+| eval _nf=mvcount(_cols)
+| eval ai_recommendation_status=mvindex(_cols,9)
+| eval automation_bias_risk_score=if(_nf>16,mvindex(_cols,16),"")
+| eval automation_bias_risk_level=if(_nf>17,mvindex(_cols,17),"")
+| eval automation_bias_risk_score=tonumber(automation_bias_risk_score)
+| where isnotnull(automation_bias_risk_score)
+| stats avg(automation_bias_risk_score) as avg_bias_risk count as decisions values(automation_bias_risk_level) as risk_levels by ai_recommendation_status
+| sort ai_recommendation_status
+
+# -----------------------------------------------------------------------------
+# 9) Evidence checklist coverage (pipe-delimited evidence_checklist field)
+# -----------------------------------------------------------------------------
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| eval _cols=split(_raw,",")
+| eval _nf=mvcount(_cols)
+| eval evidence_checklist=if(_nf>13,mvindex(_cols,13),"")
+| where len(evidence_checklist)>0
+| eval checklist_items=split(evidence_checklist,"|")
+| eval items_reviewed=mvcount(checklist_items)
+| stats avg(items_reviewed) as avg_checklist_items count as decisions by analyst
+| sort - avg_checklist_items
+
+# -----------------------------------------------------------------------------
+# 10) Decisions missing supporting or contradicting evidence
+# -----------------------------------------------------------------------------
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| eval _cols=split(_raw,",")
+| eval _nf=mvcount(_cols)
+| eval timestamp=mvindex(_cols,0)
+| eval alert_id=mvindex(_cols,1)
+| eval analyst=mvindex(_cols,2)
+| eval supporting_evidence=if(_nf>14,mvindex(_cols,14),"")
+| eval contradicting_evidence=if(_nf>15,mvindex(_cols,15),"")
+| where len(supporting_evidence)=0 OR len(contradicting_evidence)=0
+| table timestamp alert_id analyst supporting_evidence contradicting_evidence
+
+# -----------------------------------------------------------------------------
+# 11) Trust vs confidence comparison
+# -----------------------------------------------------------------------------
+index=trustops_decisions sourcetype="trustops:decision"
+| eval _is_header=if(match(_raw,"^timestamp,alert_id,analyst,"),1,0)
+| where _is_header=0
+| fields - _is_header
+| eval _cols=split(_raw,",")
+| eval confidence_score=tonumber(mvindex(_cols,6))
+| eval trust_score=tonumber(mvindex(_cols,7))
+| eval ai_recommendation_status=mvindex(_cols,9)
+| eval trust_confidence_gap=trust_score-confidence_score
+| stats avg(confidence_score) as avg_confidence avg(trust_score) as avg_trust avg(trust_confidence_gap) as avg_gap count as decisions by ai_recommendation_status
+| sort ai_recommendation_status
+
+# -----------------------------------------------------------------------------
+# 12) Agentic workflow observability — agent step telemetry (JSON _raw)
+# -----------------------------------------------------------------------------
+# Recent agent runs (all steps)
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=timestamp output=timestamp
+| spath input=_raw path=run_id output=run_id
+| spath input=_raw path=alert_id output=alert_id
+| spath input=_raw path=agent_name output=agent_name
+| spath input=_raw path=status output=status
+| spath input=_raw path=tools_used output=tools_used
+| spath input=_raw path=duration_ms output=duration_ms
+| spath input=_raw path=output_summary output=output_summary
+| eval duration_ms=tonumber(duration_ms)
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| sort - _time
+| table _time run_id alert_id agent_name status tools_used duration_ms output_summary
+
+# Agent step duration by agent
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=agent_name output=agent_name
+| spath input=_raw path=status output=status
+| spath input=_raw path=duration_ms output=duration_ms
+| eval duration_ms=tonumber(duration_ms)
+| stats avg(duration_ms) as avg_duration_ms count as steps by agent_name
+| sort - avg_duration_ms
+
+# Agent tool usage (split pipe-delimited tools_used)
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=tools_used output=tools_used
+| where len(tools_used)>0
+| eval tool=split(tools_used,"|")
+| mvexpand tool
+| stats count as uses by tool
+| sort - uses
+
+# Agent errors
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=run_id output=run_id
+| spath input=_raw path=alert_id output=alert_id
+| spath input=_raw path=agent_name output=agent_name
+| spath input=_raw path=status output=status
+| spath input=_raw path=error output=error
+| spath input=_raw path=output_summary output=output_summary
+| where status="error" OR len(error)>0
+| table _time run_id alert_id agent_name status error output_summary
+
+# Agent runs by alert_id
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=run_id output=run_id
+| spath input=_raw path=alert_id output=alert_id
+| spath input=_raw path=agent_name output=agent_name
+| spath input=_raw path=status output=status
+| stats count as steps dc(agent_name) as agents values(status) as statuses by alert_id run_id
+| sort - steps
+
+# -----------------------------------------------------------------------------
+# 13) MITRE ATT&CK Mapping Agent observability
+# -----------------------------------------------------------------------------
+# Recent MITRE ATT&CK Mapping Agent runs
+index=trustops_agent_runs sourcetype="trustops:agent_step" agent_name="MITRE ATT&CK Mapping Agent"
+| spath input=_raw path=timestamp output=timestamp
+| spath input=_raw path=run_id output=run_id
+| spath input=_raw path=alert_id output=alert_id
+| spath input=_raw path=status output=status
+| spath input=_raw path=tools_used output=tools_used
+| spath input=_raw path=output_summary output=output_summary
+| eval _time=strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+| table _time run_id alert_id status tools_used output_summary
+
+# MITRE techniques by alert
+index=trustops_agent_runs sourcetype="trustops:agent_step" agent_name="MITRE ATT&CK Mapping Agent"
+| spath input=_raw path=mitre_techniques_flat output=mitre_techniques
+| spath input=_raw path=alert_id output=alert_id
+| where len(mitre_techniques)>0
+| eval mitre_techniques=if(len(mitre_techniques)>0, mitre_techniques, mvindex(split(_raw, "T"), 1))
+| makemv delim="|" mitre_techniques
+| mvexpand mitre_techniques
+| stats count by alert_id mitre_techniques
+
+# MITRE mapping coverage (runs with MITRE step present)
+index=trustops_agent_runs sourcetype="trustops:agent_step"
+| spath input=_raw path=run_id output=run_id
+| spath input=_raw path=alert_id output=alert_id
+| spath input=_raw path=agent_name output=agent_name
+| eval has_mitre=if(agent_name="MITRE ATT&CK Mapping Agent", 1, 0)
+| stats max(has_mitre) as mitre_mapping_present by run_id alert_id
+| stats count as runs sum(mitre_mapping_present) as runs_with_mitre_mapping
+
+# Technique summary fallback (search raw for T1078 / T1110)
+index=trustops_agent_runs sourcetype="trustops:agent_step" ("T1078" OR "T1110")
+| eval technique=case(match(_raw, "T1078"), "T1078 Valid Accounts", match(_raw, "T1110"), "T1110 Brute Force", true(), "unknown")
+| stats count by technique

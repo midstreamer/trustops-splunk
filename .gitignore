@@ -1,0 +1,27 @@
+# Secrets and local env
+backend/.env
+.env
+.env.local
+frontend/.env.local
+*.splunk_pass
+~/.splunk_pass
+
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Node / frontend build
+frontend/node_modules/
+frontend/dist/
+
+# Optional large ATT&CK STIX (download via scripts/download_attack_data.sh)
+data/enterprise-attack.json
+
+# IDE / OS
+.vscode/
+.cursor/
+.DS_Store
+*.swp

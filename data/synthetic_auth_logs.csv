@@ -1,0 +1,26 @@
+timestamp,user,src_ip,dest_host,action,geo_country,auth_method,risk_score,event_type,alert_id,scenario
+2026-05-14T08:00:00Z,jsmith,203.0.113.10,vpn.corp.example,success,United States,vpn_saml,12,login_success,,normal_baseline
+2026-05-14T08:05:00Z,jsmith,203.0.113.10,vpn.corp.example,success,United States,vpn_saml,12,login_success,,normal_baseline
+2026-05-14T08:12:00Z,jdoe,198.51.100.20,vpn.corp.example,success,United States,vpn_saml,8,login_success,,normal_baseline
+2026-05-14T08:18:00Z,jdoe,198.51.100.20,vpn.corp.example,success,United States,vpn_saml,8,login_success,,normal_baseline
+2026-05-14T08:25:00Z,asmith,192.0.2.55,vpn.corp.example,success,Canada,vpn_saml,8,login_success,,normal_baseline
+2026-05-14T08:33:00Z,jsmith,203.0.113.10,vpn.corp.example,success,United States,vpn_saml,12,login_success,,normal_baseline
+2026-05-14T09:40:00Z,jsmith,198.51.100.40,vpn.corp.example,failure,United States,vpn_saml,45,login_failure,TO-VPN-2026-514,vpn_brute_then_geo_anomaly
+2026-05-14T09:42:00Z,jsmith,198.51.100.41,vpn.corp.example,failure,United States,vpn_saml,50,login_failure,TO-VPN-2026-514,vpn_brute_then_geo_anomaly
+2026-05-14T09:44:00Z,jsmith,198.51.100.42,vpn.corp.example,failure,United States,vpn_saml,55,login_failure,TO-VPN-2026-514,vpn_brute_then_geo_anomaly
+2026-05-14T09:46:00Z,jsmith,198.51.100.43,vpn.corp.example,failure,United States,vpn_saml,60,login_failure,TO-VPN-2026-514,vpn_brute_then_geo_anomaly
+2026-05-14T09:48:00Z,jsmith,198.51.100.44,vpn.corp.example,failure,United States,vpn_saml,65,login_failure,TO-VPN-2026-514,vpn_brute_then_geo_anomaly
+2026-05-14T09:50:00Z,jsmith,198.51.100.45,vpn.corp.example,failure,United States,vpn_saml,70,login_failure,TO-VPN-2026-514,vpn_brute_then_geo_anomaly
+2026-05-14T09:52:00Z,jsmith,198.51.100.46,vpn.corp.example,failure,United States,vpn_saml,75,login_failure,TO-VPN-2026-514,vpn_brute_then_geo_anomaly
+2026-05-14T10:00:00Z,jsmith,185.220.101.77,vpn.corp.example,success,Romania,vpn_saml,88,login_success,TO-VPN-2026-514,vpn_brute_then_geo_anomaly
+2026-05-14T09:50:00Z,bwilson,192.0.2.80,vpn.corp.example,success,United Kingdom,vpn_saml,10,login_success,,normal_baseline
+2026-05-14T09:55:00Z,jdoe,198.51.100.20,vpn.corp.example,success,United States,vpn_saml,10,login_success,,normal_baseline
+2026-05-14T10:02:00Z,asmith,192.0.2.55,vpn.corp.example,success,Canada,vpn_saml,10,login_success,,normal_baseline
+2026-05-14T10:10:00Z,mlee,203.0.113.200,vpn.corp.example,success,Japan,vpn_saml,10,login_success,,normal_baseline
+2026-05-14T10:20:00Z,bwilson,192.0.2.80,vpn.corp.example,success,United Kingdom,vpn_saml,10,login_success,,normal_baseline
+2026-05-14T10:40:00Z,mlee,198.51.100.120,vpn.corp.example,failure,United States,vpn_saml,22,login_failure,,normal_noise
+2026-05-14T10:44:00Z,jdoe,198.51.100.121,vpn.corp.example,failure,United States,vpn_saml,22,login_failure,,normal_noise
+2026-05-14T10:48:00Z,jdoe,198.51.100.122,vpn.corp.example,failure,United States,vpn_saml,22,login_failure,,normal_noise
+2026-05-14T10:52:00Z,mlee,198.51.100.123,vpn.corp.example,failure,United States,vpn_saml,22,login_failure,,normal_noise
+2026-05-14T10:56:00Z,asmith,198.51.100.124,vpn.corp.example,failure,United States,vpn_saml,22,login_failure,,normal_noise
+2026-05-14T11:00:00Z,jdoe,198.51.100.125,vpn.corp.example,failure,United States,vpn_saml,22,login_failure,,normal_noise

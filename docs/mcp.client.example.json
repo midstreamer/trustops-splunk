@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "splunk-mcp-server": {
+      "url": "http://localhost:8000/en-US/splunkd/__raw/services/mcp",
+      "headers": {
+        "Accept": "application/json, text/event-stream",
+        "Authorization": "Bearer YOUR_ENCRYPTED_MCP_TOKEN_HERE"
+      }
+    }
+  }
+}

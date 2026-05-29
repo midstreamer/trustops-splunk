@@ -1,0 +1,39 @@
+[
+  {
+    "alert_id": "TO-VPN-2026-514",
+    "title": "VPN authentication burst followed by success from unfamiliar geography",
+    "severity": "high",
+    "status": "open",
+    "user": "jsmith",
+    "summary": "Seven failed VPN SAML attempts from contiguous US addresses within 20 minutes, followed by a successful VPN login from Romania for the same account.",
+    "mitre_tactics": ["Initial Access", "Credential Access"],
+    "recommended_actions": [
+      "Review authentication timeline for jsmith in Splunk (index=trustops).",
+      "Validate whether jsmith has legitimate travel or vendor activity in Romania.",
+      "Consider step-up MFA or temporary account suspension pending analyst verdict."
+    ],
+    "related_src_ips": [
+      "198.51.100.40",
+      "198.51.100.41",
+      "198.51.100.42",
+      "198.51.100.43",
+      "198.51.100.44",
+      "198.51.100.45",
+      "198.51.100.46",
+      "185.220.101.77"
+    ],
+    "scenario": "vpn_brute_then_geo_anomaly"
+  },
+  {
+    "alert_id": "TO-BASELINE-0001",
+    "title": "Sample low-severity noise alert (documentation only)",
+    "severity": "low",
+    "status": "closed",
+    "user": "jdoe",
+    "summary": "Illustrative alert object for UI/API integration tests.",
+    "mitre_tactics": [],
+    "recommended_actions": ["Ignore in Splunk phase 1 — used for JSON schema examples."],
+    "related_src_ips": ["198.51.100.20"],
+    "scenario": "normal_baseline"
+  }
+]

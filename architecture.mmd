@@ -1,0 +1,45 @@
+flowchart LR
+  subgraph ingest["Synthetic data"]
+    CSV["Auth CSV ingest"]
+    CSV -->|load| AUTHIDX["index trustops"]
+  end
+
+  subgraph splunk["Splunk Enterprise"]
+    AUTHIDX
+    DECIDX["index trustops_decisions"]
+    DASH["Dashboard metrics"]
+    SAIA["Splunk AI Assistant"]
+    MCP["Splunk MCP Server"]
+    DECIDX --> DASH
+    SAIA --> MCP
+  end
+
+  subgraph backend["FastAPI port 8001"]
+    API["REST API"]
+    SDK["Splunk SDK"]
+    SAIAREST["SAIA REST client"]
+    MCPCLI["MCP client optional"]
+    FALLBACK["Deterministic ai_agent fallback"]
+    API --> SDK
+    API --> SAIAREST
+    API --> MCPCLI
+    API --> FALLBACK
+    SDK --> AUTHIDX
+    SDK --> DECIDX
+    SAIAREST --> SAIA
+    MCPCLI --> MCP
+  end
+
+  subgraph frontend["React UI port 5173"]
+    Q["Alert queue"]
+    I["Investigation plus SPL and SAIA"]
+    F["Decision form"]
+    M["Metrics panel"]
+    Q --> I --> F --> M
+  end
+
+  A["SOC analyst"]
+  A --> Q
+  I -->|read| API
+  F -->|POST decisions| API
+  API -->|receiver| DECIDX

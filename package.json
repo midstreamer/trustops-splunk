@@ -1,0 +1,11 @@
+{
+  "name": "trustops-splunk",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TrustOps for Splunk — hackathon repo",
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build:frontend": "npm run build --prefix frontend",
+    "dev:api": "bash scripts/start_backend.sh"
+  }
+}

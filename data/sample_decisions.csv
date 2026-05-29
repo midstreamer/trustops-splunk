@@ -1,0 +1,13 @@
+timestamp,alert_id,analyst,ai_recommendation,analyst_decision,final_severity,confidence_score,trust_score,time_to_decision_seconds,ai_recommendation_status,evidence_reviewed_count,sop_followed,notes
+2026-05-14T15:10:00Z,TO-VPN-2026-514,analyst01,Escalate as likely compromised account,Escalate to incident response,High,4,4,142,accepted,5,true,Failed logins followed by success from unfamiliar country
+2026-05-14T15:14:00Z,TO-VPN-2026-514,analyst02,Escalate as likely compromised account,Escalate after user verification,Medium,3,3,226,modified,6,true,Wanted user confirmation before full escalation
+2026-05-14T15:20:00Z,TO-VPN-2026-514,analyst03,Escalate as likely compromised account,Close as false positive,Low,2,2,318,rejected,3,false,Analyst believed travel explanation was plausible
+2026-05-14T15:35:00Z,TO-VPN-2026-514,analyst04,Escalate as likely compromised account,Escalate to incident response,High,5,5,95,accepted,7,true,Geo hop plus burst matched playbook
+2026-05-14T15:42:00Z,TO-VPN-2026-514,analyst05,Escalate as likely compromised account,Contain account and reset credentials,High,4,4,201,modified,8,true,Added containment steps beyond AI text
+2026-05-14T15:55:00Z,TO-VPN-2026-514,analyst06,Escalate as likely compromised account,Escalate to incident response,High,3,4,412,accepted,4,true,Reviewed Splunk timeline only
+2026-05-14T16:05:00Z,TO-VPN-2026-514,analyst07,Escalate as likely compromised account,Escalate with device forensics,High,4,3,275,modified,9,true,Requested EDR snapshot before closing triage
+2026-05-14T16:18:00Z,TO-VPN-2026-514,analyst08,Escalate as likely compromised account,Escalate to incident response,High,5,5,118,accepted,6,true,Repeated failures then success from Romania
+2026-05-14T16:30:00Z,TO-VPN-2026-514,analyst09,Escalate as likely compromised account,Monitor for 24 hours,Medium,2,3,540,modified,5,false,Lead asked for watch-and-wait despite AI escalate
+2026-05-14T16:45:00Z,TO-VPN-2026-514,analyst10,Escalate as likely compromised account,Escalate to incident response,High,4,4,164,accepted,7,true,Aligned with peer consensus on shift handover
+2026-05-14T17:05:00Z,TO-BASELINE-0001,analyst11,Monitor as low priority noise,Close as informational,Low,3,3,88,accepted,2,true,Routine duplicate login alert during maintenance
+2026-05-14T17:22:00Z,TO-BASELINE-0001,analyst12,Monitor as low priority noise,Adjust threshold and close,Low,2,2,155,modified,3,true,Tuned correlation rule after vendor confirmation
