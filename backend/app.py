@@ -4,8 +4,11 @@ TrustOps FastAPI backend — Splunk-backed triage API with deterministic local "
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -15,13 +18,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agent_run_logger import log_agent_run_to_splunk
 from agent_telemetry import build_agent_runs_summary, rows_to_telemetry_steps
-from agentic_investigation import build_contradictory_evidence, build_follow_up_queries
+from agents.contradictory_evidence_agent import resolve_contradictory_evidence
+from agentic_investigation import build_follow_up_queries
 from alert_chat import handle_alert_chat
 from alert_chat_logger import log_analyst_chat_to_splunk
-from agents.base import summarize_events_stats
-from agents.mitre_attack_agent import resolve_mitre_mappings
+from agents.mitre_attack_agent import resolve_mitre_attack_mappings
 from agents.orchestrator import run_agentic_investigation
-from ai_agent import generate_investigation
+from saia_investigation import resolve_investigation
 from config import Settings, get_settings
 from decision_duplicate_guard import register_client_decision_id
 from decision_logger import log_decision_to_splunk
@@ -49,6 +52,13 @@ from models import (
     SaiaSplResponse,
 )
 from saia_service import explain_spl, generate_spl
+from smoke_test import (
+    DEFAULT_BASE_URL,
+    format_report,
+    run_startup_smoke,
+    startup_smoke_mode,
+    wait_for_health,
+)
 from splunk_client import (
     SplunkClient,
     spl_agent_steps_for_run_spl,
@@ -114,10 +124,39 @@ def get_splunk_client() -> SplunkClient:
     return SplunkClient(get_settings())
 
 
+async def _run_startup_smoke_test(app: FastAPI) -> None:
+    del app
+    mode = startup_smoke_mode()
+    if mode is None:
+        return
+    base_url = os.getenv("TRUSTOPS_API_BASE_URL", DEFAULT_BASE_URL)
+    if not await asyncio.to_thread(wait_for_health, base_url, attempts=60, interval=0.5):
+        logger.warning("Startup smoke test skipped: API not reachable at %s", base_url)
+        return
+    try:
+        report = await asyncio.to_thread(run_startup_smoke)
+        output = format_report(report)
+        if report.passed:
+            logger.info("Startup smoke test passed (%s mode):\n%s", mode, output)
+        else:
+            logger.warning("Startup smoke test failed (%s mode):\n%s", mode, output)
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup smoke test crashed")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    mode = startup_smoke_mode()
+    if mode is not None:
+        asyncio.create_task(_run_startup_smoke_test(app))
+    yield
+
+
 app = FastAPI(
     title="TrustOps API",
     description="Hackathon backend: Splunk searches + deterministic investigation summaries + decision logging.",
     version="0.2.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -221,19 +260,28 @@ def get_investigation(
         raise HTTPException(status_code=503, detail=f"Splunk search failed: {exc}") from exc
 
     events = [normalize_auth_event(r) for r in rows]
-    ai = generate_investigation(alert.model_dump(), [e.model_dump() for e in events])
+    event_dicts = [e.model_dump() for e in events]
+    ai, investigation_source, investigation_source_detail = resolve_investigation(
+        alert.model_dump(),
+        event_dicts,
+        settings,
+    )
     notice, cal_level = trust_calibration_for_investigation(
         alert.alert_id,
         alert.severity,
         ai.recommended_severity,
     )
 
-    contradictory = build_contradictory_evidence(alert.model_dump())
+    contradictory = resolve_contradictory_evidence(
+        alert.model_dump(),
+        event_dicts,
+        settings,
+    )
     follow_ups = build_follow_up_queries(alert.model_dump(), settings.splunk_auth_index)
-    event_dicts = [e.model_dump() for e in events]
-    stats = summarize_events_stats(event_dicts)
-    mitre_mappings, mitre_rationale = resolve_mitre_mappings(
-        stats, alert.model_dump(), event_dicts
+    mitre_mappings, mitre_rationale = resolve_mitre_attack_mappings(
+        alert.model_dump(),
+        event_dicts,
+        settings,
     )
 
     return InvestigationResponse(
@@ -246,6 +294,8 @@ def get_investigation(
         recommended_actions=ai.recommended_actions,
         confidence_rationale=ai.confidence_rationale,
         spl_query_used=spl,
+        investigation_source=investigation_source,
+        investigation_source_detail=investigation_source_detail,
         trust_calibration_notice=notice,
         trust_calibration_level=cal_level,
         follow_up_queries=follow_ups,
@@ -387,7 +437,11 @@ def post_alert_chat(
         raise HTTPException(status_code=503, detail=f"Splunk search failed: {exc}") from exc
 
     events = [normalize_auth_event(r) for r in rows]
-    ai_preview = generate_investigation(alert.model_dump(), [e.model_dump() for e in events])
+    ai_preview, _, _ = resolve_investigation(
+        alert.model_dump(),
+        [e.model_dump() for e in events],
+        settings,
+    )
     trust_notice, _ = trust_calibration_for_investigation(
         alert.alert_id,
         alert.severity,

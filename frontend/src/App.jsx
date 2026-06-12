@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { CANONICAL_ID } from "./components/AlertQueue.jsx";
 import AlertQueue from "./components/AlertQueue.jsx";
 import DecisionForm from "./components/DecisionForm.jsx";
-import ContradictoryEvidencePanel from "./components/ContradictoryEvidencePanel.jsx";
 import InvestigationPanel from "./components/InvestigationPanel.jsx";
 import MetricsPanel from "./components/MetricsPanel.jsx";
 import StatusBar from "./components/StatusBar.jsx";
+import { useAgentPlanRun } from "./components/AgentPlanPanel.jsx";
 import { getAlerts, getInvestigation } from "./api.js";
 
 export default function App() {
@@ -14,7 +14,6 @@ export default function App() {
   const [alertsError, setAlertsError] = useState(null);
 
   const [selectedAlertId, setSelectedAlertId] = useState(null);
-  const [selectionStartedAtMs, setSelectionStartedAtMs] = useState(() => Date.now());
 
   const [investigation, setInvestigation] = useState(null);
   const [invLoading, setInvLoading] = useState(false);
@@ -40,7 +39,6 @@ export default function App() {
         const preferred = list.find((a) => a.alert_id === CANONICAL_ID);
         const initial = preferred?.alert_id ?? list[0]?.alert_id ?? null;
         setSelectedAlertId(initial);
-        setSelectionStartedAtMs(Date.now());
         setAlertsLoading(false);
       })
       .catch((e) => {
@@ -92,12 +90,17 @@ export default function App() {
 
   const handleSelectAlert = useCallback((id) => {
     setSelectedAlertId(id);
-    setSelectionStartedAtMs(Date.now());
   }, []);
 
   const handleDecisionSubmitted = useCallback(() => {
     setRefreshKey((k) => k + 1);
   }, []);
+
+  const handleAgentPlanViewed = useCallback(() => {
+    setAgenticViews((v) => ({ ...v, agent_plan_viewed: true }));
+  }, []);
+
+  const agentPlan = useAgentPlanRun(selectedAlertId, handleAgentPlanViewed);
 
   return (
     <div className="app-shell">
@@ -106,7 +109,12 @@ export default function App() {
         <p className="subtitle">Human-in-the-loop agentic triage for security operations</p>
       </header>
 
-      <StatusBar refreshKey={refreshKey} />
+      <StatusBar
+        refreshKey={refreshKey}
+        selectedAlertId={selectedAlertId}
+        agentRunLoading={agentPlan.loading}
+        agentRunSteps={agentPlan.run?.steps}
+      />
 
       <div className="app-grid">
         <AlertQueue
@@ -122,25 +130,18 @@ export default function App() {
             investigation={investigation}
             loading={invLoading}
             error={invError}
-            onAgentPlanViewed={() =>
-              setAgenticViews((v) => ({ ...v, agent_plan_viewed: true }))
-            }
+            agentPlan={agentPlan}
             onFollowUpQueriesViewed={() =>
               setAgenticViews((v) => ({ ...v, follow_up_queries_viewed: true }))
             }
+            onContradictoryViewed={() =>
+              setAgenticViews((v) => ({ ...v, contradictory_evidence_viewed: true }))
+            }
+            onAgentPlanViewed={handleAgentPlanViewed}
           />
-          {investigation ? (
-            <ContradictoryEvidencePanel
-              contradictoryEvidence={investigation.contradictory_evidence}
-              onViewed={() =>
-                setAgenticViews((v) => ({ ...v, contradictory_evidence_viewed: true }))
-              }
-            />
-          ) : null}
           <DecisionForm
             alertId={selectedAlertId}
             investigation={investigation}
-            selectionStartedAtMs={selectionStartedAtMs}
             agenticViews={agenticViews}
             onSubmitted={handleDecisionSubmitted}
             disabled={invLoading || !!invError || !investigation}

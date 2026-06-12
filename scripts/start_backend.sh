@@ -64,4 +64,5 @@ if [[ ! -d .venv ]]; then
 fi
 
 echo "Starting TrustOps API on http://0.0.0.0:${PORT} (user=${SPLUNK_USER})"
+echo "Startup smoke test: ${TRUSTOPS_STARTUP_SMOKE_TEST:-quick} (set TRUSTOPS_STARTUP_SMOKE_TEST=skip to disable)"
 exec .venv/bin/uvicorn app:app --reload --host 0.0.0.0 --port "${PORT}"

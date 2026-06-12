@@ -187,6 +187,8 @@ class InvestigationResponse(BaseModel):
     recommended_actions: list[str]
     confidence_rationale: str
     spl_query_used: str
+    investigation_source: Literal["saia", "fallback"] = "fallback"
+    investigation_source_detail: str | None = None
     trust_calibration_notice: str = ""
     trust_calibration_level: TrustCalibrationLevel = "low"
     follow_up_queries: list[FollowUpQuery] = Field(default_factory=list)

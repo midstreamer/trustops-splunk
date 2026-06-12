@@ -15,7 +15,7 @@ function validationBadge(mapping) {
   );
 }
 
-function MitreMappingCard({ mapping }) {
+export function MitreMappingCard({ mapping }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const hasDetails =
     mapping.description ||
@@ -83,12 +83,7 @@ export default function MitreAttackMappingPanel({ mappings, rationale }) {
 
   return (
     <div className="mitre-panel callout callout--compact">
-      <div className="mitre-panel__header">
-        <h3 className="mitre-panel__title">MITRE ATT&CK Mapping</h3>
-        <p className="mitre-panel__subtitle">
-          Evidence mapped to enterprise ATT&CK tactics and techniques.
-        </p>
-      </div>
+      <div className="callout__label">MITRE ATT&CK Mapping</div>
       {rationale ? <p className="mitre-panel__rationale">{rationale}</p> : null}
       <div className="mitre-panel__grid">
         {mappings.map((m) => (

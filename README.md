@@ -1,8 +1,8 @@
 # TrustOps for Splunk
 
-TrustOps is a **human-in-the-loop agentic security triage assistant** for Splunk. It helps SOC analysts investigate suspicious alerts using Splunk data, **Splunk AI Assistant**, and the **Splunk MCP Server**, then captures **analyst decision telemetry** (trust, confidence, final decision, and time-to-decision).
+TrustOps is a **human-in-the-loop agentic security triage assistant** for Splunk. It helps SOC analysts investigate suspicious alerts using Splunk data, **Splunk AI Assistant (SAIA)**, and optional **Splunk MCP Server** tooling, then captures **analyst decision telemetry** (trust, confidence, final decision, and automatically recorded time-to-decision).
 
-This repository implements **Phase 1** (Splunk foundation), **Phase 2** (FastAPI backend with SAIA/MCP integration), **Phase 3** (React analyst UI), and **Phase 4** (demo polish: runbook, dev check script, architecture diagram, Devpost narrative). Phase 1 covers synthetic VPN authentication data, **sample analyst decisions**, indexes, ingestion scripts, starter searches, and a Splunk dashboard. Phase 2 exposes a local API for alerts, Splunk-backed events, **agentic investigation** (Splunk AI Assistant + optional MCP), and decision logging back into Splunk—with a **deterministic local fallback** for reliable offline demos. Phase 3 is a Vite + React console that drives that API end-to-end, including **Explain SPL** and **Generate SPL** in the investigation panel.
+This repository implements **Phase 1** (Splunk foundation), **Phase 2** (FastAPI backend with SAIA/MCP integration), **Phase 3** (React analyst UI), and **Phase 4** (demo polish: runbook, dev check script, architecture diagram, Devpost narrative). Phase 1 covers synthetic VPN authentication data, **sample analyst decisions**, indexes, ingestion scripts, starter searches, and a Splunk dashboard. Phase 2 exposes a local API for alerts, Splunk-backed events, **SAIA-first investigation** (`saia_investigation.py`), **agentic investigation** (seven-step orchestrator), and decision logging back into Splunk—with a **deterministic local fallback** for reliable offline demos. Phase 3 is a Vite + React console that is **SAIA-first with auto-run agentic investigation**: Splunk AI analysis on load, alert-scoped SAIA chat, seven inline agent result sections, and **Explain SPL** on follow-up queries (`POST /saia/generate` is API-only; there is no Generate SPL button in the UI).
 
 ## Agentic Ops Positioning
 
@@ -12,7 +12,9 @@ TrustOps intentionally keeps the **analyst in control**. The system supports inv
 
 ## AI and MCP Integration
 
-TrustOps integrates with Splunk AI Assistant and Splunk MCP to support agentic security investigation workflows. The system uses Splunk data to retrieve alert context, generate investigation support, and produce analyst-facing recommendations. A deterministic local fallback agent is also included so the demo can run reliably when cloud-connected AI services are unavailable.
+TrustOps integrates with **Splunk AI Assistant** as the primary AI path (Splunk REST **`/predict`**, aligned with Search UI on Enterprise 10.2.x). **Splunk MCP** is **optional** (`SAIA_USE_MCP=false` by default) for IDE-side agents and optional backend tool-calling when configured.
+
+The system uses Splunk data to retrieve alert context, generate investigation support, and produce analyst-facing recommendations. A deterministic local fallback is included so the demo can run reliably when SAIA is unavailable.
 
 This design allows TrustOps to demonstrate both Splunk-native AI integration and dependable local execution for hackathon judging.
 
@@ -24,6 +26,7 @@ TrustOps captures whether analysts **accepted**, **modified**, or **rejected** A
 - **Evidence Review Checklist** requires at least two independent checks before submit; count syncs to `evidence_reviewed_count`.
 - **Challenge the AI Recommendation** requires supporting and contradicting evidence (stored in Splunk telemetry).
 - **Automation bias risk score** (0–9) and **Low / Moderate / High** level are computed on submit and returned with **post-decision feedback** for analyst upskilling.
+- **Time to decision** is **recorded automatically** by the system when the analyst submits (elapsed since investigation loaded)—analysts do not enter it manually.
 - Grounded in human–AI collaboration research: **calibrated trust**, **accountability**, **feedback**, and **skill reinforcement**.
 
 Legacy 13-field decision rows in Splunk remain compatible; new UI submissions write the extended schema (including `client_decision_id` at the end of each CSV row). **Duplicate submissions are prevented** in the UI after a successful submit (form locks until **Start new decision**), and the backend rejects the same `client_decision_id` with HTTP 409 during a single API process lifetime.
@@ -84,7 +87,17 @@ Verification: **`GET /alerts/TO-VPN-2026-514/agent-run`** should return **7 step
 | `GET` | `/alerts/{alert_id}/agent-plan` | **Legacy-compatible route** that now executes the **same orchestrated workflow** (no longer returns the old static template plan). |
 | `POST` | `/alerts/{alert_id}/chat` | Alert-scoped analyst chat grounded in Splunk evidence (SAIA with local fallback). |
 
-The UI **Run agentic investigation** button calls **`POST /agent-run`** and renders the execution trace (summary stats, timeline, expandable step cards). **Recommended Follow-Up SPL** and **Challenge the AI** remain separate analyst surfaces. Decision telemetry records `agent_plan_viewed`, `follow_up_queries_viewed`, `contradictory_evidence_viewed`.
+### React UI (investigation workflow)
+
+When an analyst selects an alert, the UI **automatically** calls **`POST /alerts/{alert_id}/agent-run`** (no manual run button). Investigation content appears in this order:
+
+1. **Status bar** — Backend, Splunk, **Agents: Running…** while the workflow executes, and a compact **Investigation flow** timeline (seven steps).
+2. **Agentic investigation** status badge (`running` / `complete` / `not run`) at the top of the investigation panel.
+3. **Splunk AI analysis** — SAIA-generated summary, key evidence, severity/actions/confidence, AI recommendation, and trust calibration strip; **`investigation_source`** badge shows **Splunk AI Assistant** vs **Local fallback**.
+4. **Splunk AI Assistant chat** — alert-scoped follow-up Q&A (always visible).
+5. **Seven agent callouts** — Evidence → Triage → SPL → MITRE ATT&CK → Contradictory Evidence → SOP → Trust Calibration, with two-column **Evidence / Recommendations** where applicable; follow-up SPL includes **Explain SPL** via SAIA.
+
+The UI **does not show** the raw SPL query block, event timeline table, or aggregate “Investigation result” summary (those remain available from the API). Decision telemetry records `agent_plan_viewed`, `follow_up_queries_viewed`, `contradictory_evidence_viewed`.
 
 ### Alert-Scoped Analyst Chat
 
@@ -182,6 +195,11 @@ Then open Splunk at `http://localhost:8000`, set the time picker to **Last 7 day
 | `backend/agents/sop_agent.py` | Account-takeover or generic response checklist. |
 | `backend/agents/trust_calibration_agent.py` | Pre-decision trust calibration guidance. |
 | `backend/agent_run_logger.py` | Writes per-step JSON telemetry to `trustops_agent_runs`. |
+| `backend/saia_investigation.py` | SAIA-first investigation resolver for `GET /investigation` (fallback to `ai_agent.py`). |
+| `backend/smoke_test.py` | Startup and manual smoke tests for SAIA + agentic workflow. |
+| `scripts/smoke_test.sh` | CLI wrapper: `npm run smoke-test` / `smoke-test:full`. |
+| `package.json` | Root scripts: `dev:api`, `dev:frontend`, `smoke-test`, `smoke-test:full`. |
+| `scripts/start_backend.sh` | Start API with `.env`, venv bootstrap, and startup smoke test. |
 | `docs/configure_splunk_mcp_server.md` | Splunk MCP Server setup, tokens, and Cursor client notes. |
 | `frontend/` | **Phase 3** Vite + React analyst console. |
 | `architecture.mmd` | Mermaid architecture diagram (repo root). |
@@ -208,13 +226,17 @@ sudo -u splunk /opt/splunk/bin/splunk start
 ### Terminal 2 — Backend
 
 ```bash
-cd ~/trustops-splunk/backend
-source .venv/bin/activate
-export SPLUNK_USER="cjalessi"
-export SPLUNK_PASSWORD="your-splunk-password"
-export SPLUNK_VERIFY_SSL=false
-uvicorn app:app --reload --host 0.0.0.0 --port 8001
+cd ~/trustops-splunk
+npm run dev:api
 ```
+
+Or manually:
+
+```bash
+bash ~/trustops-splunk/scripts/start_backend.sh
+```
+
+The backend loads `backend/.env`, runs on **http://localhost:8001**, and runs a **quick startup smoke test** by default (see [Smoke test](#smoke-test) below).
 
 ### Terminal 3 — Frontend
 
@@ -237,15 +259,16 @@ This verifies Splunk is running and credentials are set; it **does not** start s
 
 ### Verify the demo flow (UI)
 
-1. **Backend:** Online. **Splunk:** Reachable.
+1. **Status bar:** Backend online, Splunk reachable; on alert select the **Investigation flow** timeline animates while agents run.
 2. Select **`TO-VPN-2026-514`** (default).
-3. In **Investigation**, confirm narrative, **Trust Calibration Notice** (level **High** on **`TO-VPN-2026-514`**), and **SPL transparency** + event table. Try **Explain SPL** / **Generate SPL** when SAIA is connected.
-4. Click **Run agentic investigation**. Confirm the execution trace shows **seven steps**: Evidence, Triage, SPL, MITRE ATT&CK, Contradictory Evidence, SOP, Trust Calibration. Confirm **MITRE ATT&CK Mapping** panel and agent card show **T1078** and **T1110**. Confirm **Evidence** reports **8 rows, 7 failures, and 1 success**. Confirm **SPL Agent** shows **`splunk_ai_assistant_explain_spl`** in tools used when SAIA is available, or **local** fallback tools if not. Note **Agent run telemetry logged to Splunk** when `trustops_agent_runs` index exists.
-5. In **Analyst decision**, work through four sections: **Decision Details** → **Evidence Review Checklist** (≥2) → **Challenge the AI Recommendation** → **Submit and Feedback**. The readiness line shows **Ready to submit** when checklist, challenge fields, and analyst decision are complete.
-6. Submit as **`demo_analyst`** → feedback appears under **Submit and Feedback** (bias risk badge + learning point).
-7. Refresh **Decision metrics** (includes **Avg bias risk** when extended telemetry exists).
+3. **Splunk AI analysis** loads with the **Splunk AI Assistant** source badge (not **Local fallback** when SAIA is connected). Confirm summary, key evidence, severity/actions, AI recommendation, and **Trust Calibration** strip (level **High** on **`TO-VPN-2026-514`**).
+4. **Agentic investigation** badge shows **running**, then **complete**; agents auto-run without a manual button. Confirm seven agent sections populate (Evidence **8 rows, 7 failures, 1 success**; MITRE **T1078** and **T1110**; SPL Agent tools include **`splunk_ai_assistant_explain_spl`** when SAIA is available).
+5. Use **Explain SPL** on a follow-up query in the SPL Agent section; use **Splunk AI Assistant chat** for follow-up questions.
+6. In **Analyst decision**, work through four sections: **Decision Details** → **Evidence Review Checklist** (≥2) → **Challenge the AI Recommendation** → **Submit and Feedback**. The readiness line shows **Ready to submit** when checklist, challenge fields, and analyst decision are complete.
+7. Submit as **`demo_analyst`** → feedback appears (bias risk badge, learning point, and **time to decision recorded automatically**).
+8. **Decision metrics** panel refreshes (includes **Avg bias risk** when extended telemetry exists).
 
-**UI layout notes:** Trust Calibration sits inline under the AI recommendation (collapsible block holds severity/actions). SPL and the event timeline stay in dedicated regions so the table remains visible without excessive scrolling past narrative text.
+**UI layout notes:** Agentic status sits at the top of the investigation panel; Splunk AI analysis, chat, and seven agent callouts follow. Trust Calibration sits inline under the AI recommendation. Raw SPL-used text and the event timeline table are not shown in the UI (available via API).
 
 ### Verify in Splunk
 
@@ -266,7 +289,7 @@ npm run dev
 
 Then open **http://localhost:5173** (default Vite port). The UI reads the API base URL from **`VITE_API_BASE_URL`** (default **`http://localhost:8001`**). Use `frontend/.env.local` if your API runs elsewhere.
 
-**Flow:** run Splunk + ingest Phase 1 data, run the **Phase 2** backend on port **8001**, then start the frontend — status bar shows backend/Splunk health; **TO-VPN-2026-514** is selected by default; submit a decision to refresh Splunk-backed metrics.
+**Flow:** run Splunk + ingest Phase 1 data, run the **Phase 2** backend on port **8001**, then start the frontend — status bar shows backend/Splunk health and the agent timeline; **TO-VPN-2026-514** is selected by default; agents auto-run on alert select; submit a decision to refresh Splunk-backed metrics.
 
 Details: **`frontend/README.md`**.
 
@@ -304,9 +327,23 @@ export SPLUNK_MCP_URL="http://localhost:8000/en-US/splunkd/__raw/services/mcp"
 export SPLUNK_MCP_TOKEN_FILE="$HOME/.splunk_mcp_token"
 ```
 
+Optional — **startup smoke test** (see `backend/.env.example`):
+
+```bash
+export TRUSTOPS_STARTUP_SMOKE_TEST="quick"   # quick | full | skip
+export TRUSTOPS_SMOKE_CANONICAL_ALERT="TO-VPN-2026-514"
+export TRUSTOPS_API_BASE_URL="http://127.0.0.1:8001"
+```
+
 You can also create `backend/.env` with the same keys (see `python-dotenv` in `backend/README.md`).
 
 ### Run the API
+
+```bash
+bash scripts/start_backend.sh
+```
+
+Or manually:
 
 ```bash
 cd backend
@@ -316,6 +353,20 @@ pip install -r requirements.txt
 uvicorn app:app --reload --host 0.0.0.0 --port 8001
 ```
 
+### Smoke test
+
+On backend startup, a **quick smoke test** runs in the background by default (`TRUSTOPS_STARTUP_SMOKE_TEST=quick`): health, alerts, SAIA investigation (`investigation_source=saia`), and SAIA explain. Results are logged to the uvicorn console.
+
+Manual checks from the repo root:
+
+```bash
+npm run smoke-test          # quick (waits for /health)
+npm run smoke-test:full     # also agent 7-step run + alert chat
+bash scripts/smoke_test.sh --wait --full
+```
+
+Set `TRUSTOPS_STARTUP_SMOKE_TEST=skip` to disable startup checks.
+
 ### API (MVP)
 
 | Method | Path | Purpose |
@@ -324,10 +375,11 @@ uvicorn app:app --reload --host 0.0.0.0 --port 8001
 | `GET` | `/alerts` | Static catalog from `data/sample_alerts.json`. |
 | `GET` | `/alerts/{alert_id}` | One alert by id. |
 | `GET` | `/alerts/{alert_id}/events` | Splunk auth events for that `alert_id` + `spl_query_used`. |
-| `GET` | `/alerts/{alert_id}/investigation` | Alert + events + investigation summary + trust calibration + `follow_up_queries` + `contradictory_evidence` + SPL used. |
+| `GET` | `/alerts/{alert_id}/investigation` | Alert + events + **SAIA-first** investigation (`investigation_source`, summary, evidence, trust calibration, follow-ups, contradictory evidence, MITRE mappings). |
 | `GET` | `/alerts/{alert_id}/agent-run` | Run sequential agent orchestrator; returns `AgentRunResult` execution trace; logs steps to Splunk when configured. |
-| `POST` | `/alerts/{alert_id}/agent-run` | Same orchestration as GET; starts a new `run_id`. |
+| `POST` | `/alerts/{alert_id}/agent-run` | Same orchestration as GET; starts a new `run_id` (UI auto-calls on alert select). |
 | `GET` | `/alerts/{alert_id}/agent-plan` | Legacy-compatible alias: **same orchestrated workflow** as `agent-run` (not the old static plan). |
+| `POST` | `/alerts/{alert_id}/chat` | Alert-scoped SAIA chat grounded in investigation context (logged to Splunk). |
 | `GET` | `/agent-runs/{run_id}/telemetry` | Agent step events for a run from `trustops_agent_runs`. |
 | `GET` | `/agent-runs/summary` | Aggregate agent-step metrics from Splunk. |
 | `GET` | `/alerts/{alert_id}/follow-up-queries` | Recommended follow-up SPL queries (title, purpose, priority). |
@@ -339,31 +391,33 @@ uvicorn app:app --reload --host 0.0.0.0 --port 8001
 
 **CORS** is enabled for `http://localhost:5173` and `http://localhost:3000` (Vite / CRA).
 
-Smoke-test URLs: `http://localhost:8001/health`, `http://localhost:8001/alerts`, `http://localhost:8001/alerts/TO-VPN-2026-514/investigation`, `http://localhost:8001/decisions/summary`.
+Smoke-test URLs: `http://localhost:8001/health`, `http://localhost:8001/alerts`, `http://localhost:8001/alerts/TO-VPN-2026-514/investigation`, `http://localhost:8001/decisions/summary`. Or run `npm run smoke-test`.
 
 Full setup and `curl` examples: **`backend/README.md`**.
 
 ## How AI is used
 
-TrustOps uses AI in **three complementary ways**, with deterministic fallbacks for reliable demos:
+TrustOps uses AI in **five complementary layers**, with deterministic fallbacks and source badges so analysts always know what ran:
 
-1. **Splunk AI Assistant** — **Explain SPL** and **Generate SPL** in the investigation panel (`POST /saia/explain`, `POST /saia/generate`). Backend uses Splunk’s SAIA **`/predict`** REST flow (aligned with Search UI on Enterprise 10.2.x).
-2. **Splunk AI Assistant / MCP-assisted investigation support** — Where configured, SAIA and the **Splunk MCP Server** enrich investigation context, optional MCP `saia_*` tools, and IDE-side agent access (`docs/configure_splunk_mcp_server.md`).
-3. **Local deterministic fallback** — **`ai_agent.py`** (investigation narrative), **`backend/agents/`** rules (orchestrator steps), and local SPL explain/generate paths when SAIA is unavailable—so hackathon and offline runs stay coherent.
+1. **SAIA investigation on load** — `resolve_investigation()` in [`backend/saia_investigation.py`](backend/saia_investigation.py) powers the top **Splunk AI analysis** block (`GET /investigation`; badge: **Splunk AI Assistant** vs **Local fallback**).
+2. **SAIA alert chat** — `POST /alerts/{id}/chat` for follow-up questions grounded in alert context and evidence.
+3. **Agentic orchestrator** — seven sequential agents (`POST /agent-run`, auto-triggered by the UI); SAIA assists inside **SPL Agent** (`splunk_ai_assistant_explain_spl`) and **Contradictory Evidence Agent** (`splunk_ai_assistant_context`).
+4. **SAIA explain on follow-up SPL** — **Explain SPL** in the SPL Agent section (`POST /saia/explain`). **`POST /saia/generate`** exists for API/IDE use but is not wired in the React UI.
+5. **Deterministic fallback** — [`backend/ai_agent.py`](backend/ai_agent.py) and rule-based agents when SAIA is unavailable.
 
-The **sequential agent orchestrator** can call **AI-assisted functions as tools inside agent steps** (for example SPL Agent → `splunk_ai_assistant_explain_spl`). The workflow remains **transparent and auditable**: each step records `tools_used`, evidence, and timestamps in the execution trace (and optionally in `trustops_agent_runs`).
+The backend uses Splunk REST **`/predict`** (v1) as the primary SAIA path on Enterprise 10.2.x. **MCP is optional** (`SAIA_USE_MCP=false` by default). Each agent step records `tools_used`, evidence, and timestamps in the execution trace and in `trustops_agent_runs` when configured.
 
-### Splunk AI Assistant and Splunk MCP (primary)
+### Splunk AI Assistant (primary)
 
-- **SAIA** — Explain/generate SPL and narrative support; UI badges show **Splunk AI Assistant** vs **Local fallback**.
-- **MCP** — Bridge for searches, indexes, and optional SAIA tools when `SAIA_USE_MCP=true` (often disabled on CMP stacks in favor of `/predict`).
+- **SAIA** — Investigation narrative, chat, and SPL explain; UI badges show **Splunk AI Assistant** vs **Local fallback**.
+- **MCP** — Optional bridge for IDE agents and backend tool-calling when `SAIA_USE_MCP=true` and tokens are configured (`docs/configure_splunk_mcp_server.md`).
 
 ### Deterministic fallback (reliability)
 
-- **`ai_agent.py`** — Investigation summary for `/investigation` when SAIA paths are not used for narrative.
+- **`ai_agent.py`** — Investigation summary when SAIA is unreachable.
 - **`backend/agents/*`** — Rule-based triage, evidence parsing, contradictory evidence, SOP mapping, and trust calibration without requiring cloud AI for every step.
 
-The backend prefers **SAIA/MCP where available**; analysts always see which tools ran on each agent step.
+The backend prefers **SAIA where available**; analysts see source badges on investigation load and `tools_used` on each agent step.
 
 ## Verify authentication data
 
@@ -428,17 +482,16 @@ More examples (alert pivot for `TO-VPN-2026-514`, IP history, risk rollups, deci
 
 Future work (see also [`docs/architecture.md`](docs/architecture.md) and [`docs/devpost_submission.md`](docs/devpost_submission.md)):
 
-- **Expand agent-run observability** — richer dashboards and SLA-style metrics on `trustops_agent_runs` (per-step logging exists today).
+- **Richer agent-run dashboards** — SLA-style metrics and visualizations on `trustops_agent_runs` (per-step logging exists today).
 - **Expand MCP tool coverage** for agentic retrieval over lookups, knowledge objects, and enrichment.
 - **More alert scenarios** beyond VPN/geo (cloud identity, endpoint, email) using the same decision schema.
-- **SOP mapping** — link recommendations to internal runbooks and capture compliance signals.
-- **MITRE ATT&CK** tagging on evidence and analyst decisions.
+- **Generate SPL in the UI** — wire `POST /saia/generate` into the investigation panel.
 - **SOAR-style response recommendations** (human-approved) with audit trails.
 - Production hardening: API authentication, TLS to Splunk, and secrets management.
 
 The end-to-end demo path is:
 
-**React UI (Phase 3) → FastAPI (Phase 2) → Splunk + sequential agent orchestrator + SAIA/MCP → investigation → `POST /decisions` → Splunk dashboards**
+**React UI (Phase 3) → FastAPI (Phase 2) → Splunk + SAIA + sequential agent orchestrator → investigation → `POST /decisions` → Splunk dashboards**
 
 ## License / hackathon
 

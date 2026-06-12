@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { postAgentRun } from "../api.js";
+import AgentTimeline, { sortSteps } from "./AgentTimeline.jsx";
 import { MitreAgentMappingsTable } from "./MitreAttackMappingPanel.jsx";
 
 const TIMELINE_ORDER = [
@@ -97,13 +98,6 @@ function runWorkflowStats(run) {
   };
 }
 
-function sortSteps(steps) {
-  const order = new Map(TIMELINE_ORDER.map((n, i) => [n, i]));
-  return [...(steps || [])].sort(
-    (a, b) => (order.get(a.agent_name) ?? 99) - (order.get(b.agent_name) ?? 99)
-  );
-}
-
 function buildCopyText(step) {
   const parts = [
     step.agent_name,
@@ -112,35 +106,6 @@ function buildCopyText(step) {
     ...(step.recommendations || []),
   ].filter(Boolean);
   return parts.join("\n");
-}
-
-function AgentTimeline({ steps }) {
-  const ordered = sortSteps(steps);
-  return (
-    <div className="agent-timeline" aria-label="Workflow step timeline">
-      <p className="agent-timeline__heading">Investigation flow</p>
-      <div className="agent-timeline__track">
-        {ordered.map((step, i) => {
-          const meta = AGENT_META[step.agent_name] || { timeline: "?" };
-          const isError = step.status === "error";
-          return (
-            <div key={step.agent_name} className="agent-timeline__segment-wrap">
-              {i > 0 ? <span className="agent-timeline__connector" aria-hidden="true" /> : null}
-              <div className="agent-timeline__segment">
-                <div
-                  className={`agent-timeline__node ${isError ? "agent-timeline__node--error" : "agent-timeline__node--complete"}`}
-                  title={`${step.agent_name}: ${step.status}`}
-                >
-                  <span className="agent-timeline__step-num">{i + 1}</span>
-                  <span className="agent-timeline__label">{meta.timeline}</span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function AgentStepCard({ step, expanded, onToggle, onCopy, copyOk }) {
@@ -226,7 +191,7 @@ function AgentStepCard({ step, expanded, onToggle, onCopy, copyOk }) {
   );
 }
 
-export default function AgentPlanPanel({ alertId, onViewed }) {
+export function useAgentPlanRun(alertId, onViewed) {
   const [visible, setVisible] = useState(false);
   const [run, setRun] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -247,12 +212,41 @@ export default function AgentPlanPanel({ alertId, onViewed }) {
   }, []);
 
   useEffect(() => {
-    setVisible(false);
+    if (!alertId) {
+      setVisible(false);
+      setRun(null);
+      setError(null);
+      setLoading(false);
+      setExpanded({});
+      setCopyKey(null);
+      return;
+    }
+
+    let cancelled = false;
+    setVisible(true);
     setRun(null);
     setError(null);
-    setLoading(false);
+    setLoading(true);
     setExpanded({});
     setCopyKey(null);
+
+    postAgentRun(alertId)
+      .then((data) => {
+        if (!cancelled) setRun(data);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e.message);
+          setRun(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [alertId]);
 
   useEffect(() => {
@@ -265,39 +259,23 @@ export default function AgentPlanPanel({ alertId, onViewed }) {
     if (visible && run) onViewed?.();
   }, [visible, run, onViewed]);
 
-  async function handleRun() {
-    if (!alertId) return;
-    setLoading(true);
-    setError(null);
-    setVisible(true);
-    try {
-      const data = await postAgentRun(alertId);
-      setRun(data);
-    } catch (e) {
-      setError(e.message);
-      setRun(null);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function expandAll() {
+  const expandAll = useCallback(() => {
     const next = {};
     sortedSteps.forEach((s) => {
       next[s.agent_name] = true;
     });
     setExpanded(next);
-  }
+  }, [sortedSteps]);
 
-  function collapseAll() {
+  const collapseAll = useCallback(() => {
     const next = {};
     sortedSteps.forEach((s) => {
       next[s.agent_name] = false;
     });
     setExpanded(next);
-  }
+  }, [sortedSteps]);
 
-  async function handleCopyStep(step) {
+  const handleCopyStep = useCallback(async (step) => {
     try {
       await navigator.clipboard.writeText(buildCopyText(step));
       setCopyKey(step.agent_name);
@@ -305,27 +283,47 @@ export default function AgentPlanPanel({ alertId, onViewed }) {
     } catch {
       setCopyKey(null);
     }
-  }
+  }, []);
+
+  return {
+    loading,
+    error,
+    run,
+    visible,
+    setVisible,
+    expanded,
+    setExpanded,
+    copyKey,
+    sortedSteps,
+    stats,
+    expandAll,
+    collapseAll,
+    handleCopyStep,
+  };
+}
+
+export default function AgentPlanPanel({ alertId, agentPlan }) {
+  const {
+    error,
+    run,
+    visible,
+    setVisible,
+    expanded,
+    setExpanded,
+    copyKey,
+    sortedSteps,
+    stats,
+    expandAll,
+    collapseAll,
+    handleCopyStep,
+  } = agentPlan;
 
   if (!alertId) return null;
 
   return (
     <div className="agent-plan">
-      <p className="agent-plan__intro">
-        Tool-backed <strong>agentic workflow</strong> with specialized roles. Each step records
-        an execution trace (Splunk search, rules, SPL, SAIA when available)—not fully autonomous
-        agents.
-      </p>
-      <div className="agent-plan__toolbar">
-        <button
-          type="button"
-          className="btn btn--primary btn--sm"
-          onClick={handleRun}
-          disabled={loading}
-        >
-          {loading ? "Running agentic investigation…" : "Run agentic investigation"}
-        </button>
-        {run ? (
+      {run ? (
+        <div className="agent-plan__toolbar">
           <button
             type="button"
             className="btn btn--ghost btn--sm"
@@ -333,8 +331,8 @@ export default function AgentPlanPanel({ alertId, onViewed }) {
           >
             {visible ? "Hide execution trace" : "Show execution trace"}
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
       {error ? <div className="error-banner agent-plan__error">{error}</div> : null}
       {visible && run ? (
         <div className="agent-plan__body">

@@ -16,7 +16,6 @@ const defaultForm = () => ({
   ai_recommendation: "",
   confidence_score: 4,
   trust_score: 4,
-  time_to_decision_seconds: 0,
   ai_recommendation_status: "accepted",
   evidence_reviewed_count: 0,
   sop_followed: true,
@@ -39,7 +38,7 @@ function elapsedSeconds(selectionStartedAtMs) {
   );
 }
 
-function buildFormFromInvestigation(investigation, selectionStartedAtMs) {
+function buildFormFromInvestigation(investigation) {
   return {
     analyst: "demo_analyst",
     analyst_decision: "Escalate to incident response",
@@ -47,7 +46,6 @@ function buildFormFromInvestigation(investigation, selectionStartedAtMs) {
     ai_recommendation: investigation?.ai_recommendation || "",
     confidence_score: 4,
     trust_score: 4,
-    time_to_decision_seconds: elapsedSeconds(selectionStartedAtMs),
     ai_recommendation_status: "accepted",
     evidence_reviewed_count: 0,
     sop_followed: true,
@@ -80,7 +78,6 @@ function submitButtonLabel({ hasSubmitted, isSubmitting, readyToSubmit }) {
 export default function DecisionForm({
   alertId,
   investigation,
-  selectionStartedAtMs,
   agenticViews = {},
   onSubmitted,
   disabled,
@@ -88,6 +85,7 @@ export default function DecisionForm({
   const [form, setForm] = useState(defaultForm);
   const [evidenceChecks, setEvidenceChecks] = useState(defaultChecks);
   const [clientDecisionId, setClientDecisionId] = useState(() => newClientDecisionId());
+  const [decisionStartedAtMs, setDecisionStartedAtMs] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -129,15 +127,20 @@ export default function DecisionForm({
       setEvidenceChecks(defaultChecks());
       return;
     }
-    setForm(buildFormFromInvestigation(investigation, selectionStartedAtMs));
+    setForm(buildFormFromInvestigation(investigation));
     setEvidenceChecks(defaultChecks());
-  }, [investigation, alertId, selectionStartedAtMs]);
+  }, [investigation, alertId]);
 
   useEffect(() => {
     resetSubmissionState();
     setClientDecisionId(newClientDecisionId());
     loadDefaultsForAlert();
-  }, [investigation, alertId, selectionStartedAtMs, resetSubmissionState, loadDefaultsForAlert]);
+    if (investigation && alertId) {
+      setDecisionStartedAtMs(Date.now());
+    } else {
+      setDecisionStartedAtMs(null);
+    }
+  }, [investigation, alertId, resetSubmissionState, loadDefaultsForAlert]);
 
   useEffect(() => {
     setForm((f) => ({ ...f, evidence_reviewed_count: checkedCount }));
@@ -172,6 +175,7 @@ export default function DecisionForm({
   function handleStartNewDecision() {
     resetSubmissionState();
     setClientDecisionId(newClientDecisionId());
+    setDecisionStartedAtMs(Date.now());
     loadDefaultsForAlert();
   }
 
@@ -185,7 +189,7 @@ export default function DecisionForm({
     setSubmitError(null);
     setSubmissionResult(null);
     try {
-      const elapsed = elapsedSeconds(selectionStartedAtMs);
+      const elapsed = elapsedSeconds(decisionStartedAtMs);
       const data = await postDecision({
         client_decision_id: clientDecisionId,
         alert_id: alertId,
@@ -293,17 +297,6 @@ export default function DecisionForm({
                   max={5}
                   value={form.trust_score}
                   onChange={(e) => updateField("trust_score", e.target.value)}
-                  disabled={formLocked}
-                />
-              </div>
-              <div className="form-field">
-                <label htmlFor="time_to_decision_seconds">Time to decision (s)</label>
-                <input
-                  id="time_to_decision_seconds"
-                  type="number"
-                  min={0}
-                  value={form.time_to_decision_seconds}
-                  onChange={(e) => updateField("time_to_decision_seconds", e.target.value)}
                   disabled={formLocked}
                 />
               </div>
@@ -481,6 +474,12 @@ export default function DecisionForm({
             {submissionResult ? (
               <div className="post-decision-feedback" aria-live="polite">
                 <p className="post-decision-feedback__success">Decision logged to Splunk.</p>
+                {submissionResult.decision?.time_to_decision_seconds != null ? (
+                  <p className="post-decision-feedback__timing">
+                    Time to decision: {submissionResult.decision.time_to_decision_seconds}s
+                    (recorded automatically)
+                  </p>
+                ) : null}
                 <div className="post-decision-feedback__row">
                   <span className="post-decision-feedback__label">Automation Bias Risk</span>
                   <span

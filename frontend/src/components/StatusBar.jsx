@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getHealth } from "../api.js";
+import AgentTimeline, { buildPlaceholderTimelineSteps, sortSteps } from "./AgentTimeline.jsx";
 
 function mapSplunkLabel(health) {
   if (!health?.splunk_configured) return "Not configured";
@@ -7,7 +8,12 @@ function mapSplunkLabel(health) {
   return "Not reachable";
 }
 
-export default function StatusBar({ refreshKey = 0 }) {
+export default function StatusBar({
+  refreshKey = 0,
+  agentRunLoading = false,
+  selectedAlertId = null,
+  agentRunSteps = null,
+}) {
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -38,30 +44,53 @@ export default function StatusBar({ refreshKey = 0 }) {
   const backendOnline = !error && health != null;
   const splunkLabel = health ? mapSplunkLabel(health) : error ? "Unknown" : "…";
 
+  const timelineSteps = useMemo(() => {
+    if (agentRunSteps?.length) return sortSteps(agentRunSteps);
+    if (agentRunLoading) return buildPlaceholderTimelineSteps("running");
+    return null;
+  }, [agentRunSteps, agentRunLoading]);
+
+  const showTimeline = !!selectedAlertId && !!timelineSteps?.length;
+
   return (
     <div className="status-bar" role="status">
-      <div className="status-bar__item">
-        <span
-          className={`status-dot ${backendOnline ? "status-dot--ok" : "status-dot--bad"}`}
-          aria-hidden
-        />
-        <span className="status-bar__label">Backend</span>
-        <strong>{loading ? "Checking…" : backendOnline ? "Online" : "Offline"}</strong>
+      <div className="status-bar__health">
+        <div className="status-bar__item">
+          <span
+            className={`status-dot ${backendOnline ? "status-dot--ok" : "status-dot--bad"}`}
+            aria-hidden
+          />
+          <span className="status-bar__label">Backend</span>
+          <strong>{loading ? "Checking…" : backendOnline ? "Online" : "Offline"}</strong>
+        </div>
+        <div className="status-bar__item">
+          <span
+            className={`status-dot ${
+              health?.splunk_reachable
+                ? "status-dot--ok"
+                : health?.splunk_configured
+                  ? "status-dot--bad"
+                  : "status-dot--warn"
+            }`}
+            aria-hidden
+          />
+          <span className="status-bar__label">Splunk</span>
+          <strong>{loading ? "Checking…" : splunkLabel}</strong>
+        </div>
+        {selectedAlertId && agentRunLoading ? (
+          <div className="status-bar__item status-bar__item--run">
+            <span className="status-bar__label">Agents</span>
+            <strong>Running…</strong>
+          </div>
+        ) : null}
       </div>
-      <div className="status-bar__item">
-        <span
-          className={`status-dot ${
-            health?.splunk_reachable
-              ? "status-dot--ok"
-              : health?.splunk_configured
-                ? "status-dot--bad"
-                : "status-dot--warn"
-          }`}
-          aria-hidden
-        />
-        <span className="status-bar__label">Splunk</span>
-        <strong>{loading ? "Checking…" : splunkLabel}</strong>
-      </div>
+
+      {showTimeline ? (
+        <div className="status-bar__timeline">
+          <AgentTimeline steps={timelineSteps} compact showHeading={false} />
+        </div>
+      ) : null}
+
       {health?.detail && !error ? (
         <p className="status-bar__detail">{health.detail}</p>
       ) : null}

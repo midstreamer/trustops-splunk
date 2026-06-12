@@ -26,7 +26,6 @@ function sourceLabel(source) {
 }
 
 export default function AlertChatPanel({ alertId, investigation }) {
-  const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState(null);
   const [exchanges, setExchanges] = useState([]);
@@ -35,7 +34,6 @@ export default function AlertChatPanel({ alertId, investigation }) {
   const [copyOk, setCopyOk] = useState(null);
 
   useEffect(() => {
-    setOpen(false);
     setInput("");
     setConversationId(null);
     setExchanges([]);
@@ -106,118 +104,106 @@ export default function AlertChatPanel({ alertId, investigation }) {
   if (!alertId) return null;
 
   return (
-    <div className="alert-chat">
-      <button
-        type="button"
-        className="alert-chat__toggle btn btn--ghost btn--sm"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        {open ? "Hide Ask Splunk AI" : "Ask Splunk AI about this alert"}
-      </button>
+    <div className="alert-chat callout callout--compact callout--ai">
+      <div className="callout__label">Splunk AI Assistant</div>
+      <p className="alert-chat__intro">
+        Ask follow-up questions about this alert — grounded in Splunk evidence for{" "}
+        <strong>{investigation?.alert?.alert_id || alertId}</strong>.
+      </p>
 
-      {open ? (
-        <div className="alert-chat__panel">
-          <p className="alert-chat__intro">
-            Alert-scoped, read-only chat grounded in Splunk evidence for{" "}
-            <strong>{investigation?.alert?.alert_id || alertId}</strong>. Not a generic chatbot.
-          </p>
-
-          <div className="alert-chat__chips">
-            {PROMPT_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                className="alert-chat__chip"
-                disabled={loading}
-                onClick={() => sendMessage(chip)}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-
-          {visibleExchanges.length ? (
-            <div className="alert-chat__history">
-              {visibleExchanges.map((ex, i) => (
-                <div key={`${i}-${ex.question.slice(0, 24)}`} className="alert-chat__exchange">
-                  <div className="alert-chat__bubble alert-chat__bubble--q">
-                    <span className="alert-chat__role">You</span>
-                    <p>{ex.question}</p>
-                  </div>
-                  <div className="alert-chat__bubble alert-chat__bubble--a">
-                    <div className="alert-chat__answer-head">
-                      <span className="alert-chat__role">Answer</span>
-                      <span className={sourceBadgeClass(ex.source)}>{sourceLabel(ex.source)}</span>
-                    </div>
-                    <ChatAnswerBody text={ex.answer} />
-                    {ex.evidence_used?.length ? (
-                      <details className="alert-chat__evidence-details">
-                        <summary className="alert-chat__evidence-label">
-                          Evidence used ({ex.evidence_used.length})
-                        </summary>
-                        <ul className="alert-chat__evidence-list">
-                          {ex.evidence_used.map((item, j) => (
-                            <li key={j}>{item}</li>
-                          ))}
-                        </ul>
-                      </details>
-                    ) : null}
-                    {ex.suggested_spl ? (
-                      <div className="alert-chat__spl">
-                        <div className="alert-chat__spl-head">
-                          <span>Suggested SPL</span>
-                          <button
-                            type="button"
-                            className="btn btn--ghost btn--xs"
-                            onClick={() => handleCopySpl(ex.suggested_spl)}
-                          >
-                            {copyOk === ex.suggested_spl ? "Copied" : "Copy SPL"}
-                          </button>
-                        </div>
-                        <pre className="alert-chat__spl-pre">{ex.suggested_spl}</pre>
-                      </div>
-                    ) : null}
-                    {ex.safety_note && !answerIncludesSafetyNote(ex.answer, ex.safety_note) ? (
-                      <p className="alert-chat__safety">{ex.safety_note}</p>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="alert-chat__empty">Ask a follow-up question about this alert.</p>
-          )}
-
-          {error ? <div className="error-banner alert-chat__error">{error}</div> : null}
-
-          <form
-            className="alert-chat__form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              sendMessage();
-            }}
+      <div className="alert-chat__chips">
+        {PROMPT_CHIPS.map((chip) => (
+          <button
+            key={chip}
+            type="button"
+            className="alert-chat__chip"
+            disabled={loading}
+            onClick={() => sendMessage(chip)}
           >
-            <input
-              type="text"
-              className="alert-chat__input"
-              placeholder="Ask about severity, evidence, SPL, MITRE, SOP…"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              disabled={loading}
-              maxLength={2000}
-            />
-            <button type="submit" className="btn btn--primary btn--sm" disabled={loading || !input.trim()}>
-              {loading ? "Sending…" : "Send"}
-            </button>
-            {exchanges.length ? (
-              <button type="button" className="btn btn--ghost btn--sm" onClick={handleClear} disabled={loading}>
-                Clear chat
-              </button>
-            ) : null}
-          </form>
+            {chip}
+          </button>
+        ))}
+      </div>
+
+      {visibleExchanges.length ? (
+        <div className="alert-chat__history">
+          {visibleExchanges.map((ex, i) => (
+            <div key={`${i}-${ex.question.slice(0, 24)}`} className="alert-chat__exchange">
+              <div className="alert-chat__bubble alert-chat__bubble--q">
+                <span className="alert-chat__role">You</span>
+                <p>{ex.question}</p>
+              </div>
+              <div className="alert-chat__bubble alert-chat__bubble--a">
+                <div className="alert-chat__answer-head">
+                  <span className="alert-chat__role">Answer</span>
+                  <span className={sourceBadgeClass(ex.source)}>{sourceLabel(ex.source)}</span>
+                </div>
+                <ChatAnswerBody text={ex.answer} />
+                {ex.evidence_used?.length ? (
+                  <details className="alert-chat__evidence-details">
+                    <summary className="alert-chat__evidence-label">
+                      Evidence used ({ex.evidence_used.length})
+                    </summary>
+                    <ul className="alert-chat__evidence-list">
+                      {ex.evidence_used.map((item, j) => (
+                        <li key={j}>{item}</li>
+                      ))}
+                    </ul>
+                  </details>
+                ) : null}
+                {ex.suggested_spl ? (
+                  <div className="alert-chat__spl">
+                    <div className="alert-chat__spl-head">
+                      <span>Suggested SPL</span>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--xs"
+                        onClick={() => handleCopySpl(ex.suggested_spl)}
+                      >
+                        {copyOk === ex.suggested_spl ? "Copied" : "Copy SPL"}
+                      </button>
+                    </div>
+                    <pre className="alert-chat__spl-pre">{ex.suggested_spl}</pre>
+                  </div>
+                ) : null}
+                {ex.safety_note && !answerIncludesSafetyNote(ex.answer, ex.safety_note) ? (
+                  <p className="alert-chat__safety">{ex.safety_note}</p>
+                ) : null}
+              </div>
+            </div>
+          ))}
         </div>
-      ) : null}
+      ) : (
+        <p className="alert-chat__empty">Ask a follow-up question about this alert.</p>
+      )}
+
+      {error ? <div className="error-banner alert-chat__error">{error}</div> : null}
+
+      <form
+        className="alert-chat__form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          sendMessage();
+        }}
+      >
+        <input
+          type="text"
+          className="alert-chat__input"
+          placeholder="Ask about severity, evidence, SPL, MITRE, SOP…"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          disabled={loading}
+          maxLength={2000}
+        />
+        <button type="submit" className="btn btn--primary btn--sm" disabled={loading || !input.trim()}>
+          {loading ? "Sending…" : "Send"}
+        </button>
+        {exchanges.length ? (
+          <button type="button" className="btn btn--ghost btn--sm" onClick={handleClear} disabled={loading}>
+            Clear chat
+          </button>
+        ) : null}
+      </form>
     </div>
   );
 }

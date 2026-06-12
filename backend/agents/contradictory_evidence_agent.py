@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from agents.base import InvestigationContext
-from models import AgentStepResult
+from typing import Any
+
+from agents.base import InvestigationContext, summarize_events_stats
+from config import Settings
+from models import AgentStepResult, ContradictoryEvidence
 
 
 def run_contradictory_evidence_agent(ctx: InvestigationContext) -> AgentStepResult:
@@ -64,4 +67,34 @@ def run_contradictory_evidence_agent(ctx: InvestigationContext) -> AgentStepResu
         ),
         evidence=benign[:3] + gaps[:2],
         recommendations=validation,
+    )
+
+
+def resolve_contradictory_evidence(
+    alert: dict[str, Any],
+    events: list[dict[str, Any]],
+    settings: Settings,
+    *,
+    spl_explain_source: str = "",
+) -> ContradictoryEvidence:
+    """Run the Contradictory Evidence Agent against alert metadata and Splunk events."""
+    event_dicts = [dict(e) for e in events]
+    ctx = InvestigationContext(
+        alert=alert,
+        auth_index=settings.splunk_auth_index,
+        settings=settings,
+        events=event_dicts,
+        evidence_stats=summarize_events_stats(event_dicts),
+        spl_explain_source=spl_explain_source,
+    )
+    run_contradictory_evidence_agent(ctx)
+    contradictory = ctx.contradictory
+    return ContradictoryEvidence(
+        possible_benign_explanations=list(
+            contradictory.get("possible_benign_explanations") or []
+        ),
+        recommended_validation_steps=list(
+            contradictory.get("recommended_validation_steps") or []
+        ),
+        evidence_gaps=list(contradictory.get("evidence_gaps") or []),
     )

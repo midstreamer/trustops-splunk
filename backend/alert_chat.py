@@ -5,9 +5,10 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from agentic_investigation import build_contradictory_evidence, build_follow_up_queries
+from agents.contradictory_evidence_agent import resolve_contradictory_evidence
+from agentic_investigation import build_follow_up_queries
 from agents.base import summarize_events_stats
-from agents.mitre_attack_agent import resolve_mitre_mappings
+from agents.mitre_attack_agent import resolve_mitre_attack_mappings
 from agents.sop_agent import _ACCOUNT_TAKEOVER_SOP, _GENERIC_SOP
 from ai_agent import generate_investigation
 from config import Settings
@@ -363,8 +364,10 @@ def handle_alert_chat(
     stats = summarize_events_stats(event_dicts)
 
     ai = generate_investigation(alert, event_dicts)
-    contradictory = build_contradictory_evidence(alert)
-    mitre_mappings, mitre_rationale = resolve_mitre_mappings(stats, alert, event_dicts)
+    contradictory = resolve_contradictory_evidence(alert, event_dicts, settings)
+    mitre_mappings, mitre_rationale = resolve_mitre_attack_mappings(
+        alert, event_dicts, settings
+    )
     sop_checklist = _sop_checklist(alert)
 
     context_block, evidence_used = build_alert_context(

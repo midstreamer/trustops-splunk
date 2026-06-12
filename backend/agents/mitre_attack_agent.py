@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from agents.base import InvestigationContext
+from agents.base import InvestigationContext, summarize_events_stats
 from attack_enrichment import enrich_mappings
+from config import Settings
 from models import AgentStepResult, MitreAttackMapping
 
 MITRE_OVERALL_RATIONALE = (
@@ -167,3 +168,23 @@ def run_mitre_attack_agent(ctx: InvestigationContext) -> AgentStepResult:
         mitre_techniques=techniques or None,
         mitre_tactics=tactics or None,
     )
+
+
+def resolve_mitre_attack_mappings(
+    alert: dict[str, Any],
+    events: list[dict[str, Any]],
+    settings: Settings,
+) -> tuple[list[MitreAttackMapping], str]:
+    """Run the MITRE ATT&CK Mapping Agent against alert metadata and Splunk events."""
+    event_dicts = [dict(e) for e in events]
+    ctx = InvestigationContext(
+        alert=alert,
+        auth_index=settings.splunk_auth_index,
+        settings=settings,
+        events=event_dicts,
+        evidence_stats=summarize_events_stats(event_dicts),
+    )
+    step = run_mitre_attack_agent(ctx)
+    mappings = list(step.mitre_mappings or [])
+    rationale = MITRE_OVERALL_RATIONALE if mappings else ""
+    return mappings, rationale
