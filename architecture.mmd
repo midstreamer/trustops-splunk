@@ -1,45 +1,71 @@
-flowchart LR
-  subgraph ingest["Synthetic data"]
-    CSV["Auth CSV ingest"]
-    CSV -->|load| AUTHIDX["index trustops"]
+flowchart TB
+  subgraph ingest["Synthetic data ingest"]
+    AuthCSV["Auth CSV"]
+    DecCSV["Sample decisions CSV"]
+    AuthCSV -->|oneshot| AuthIdx["index=trustops<br/>sourcetype=trustops:auth"]
+    DecCSV -->|oneshot| DecIdx["index=trustops_decisions<br/>sourcetype=trustops:decision"]
   end
 
   subgraph splunk["Splunk Enterprise"]
-    AUTHIDX
-    DECIDX["index trustops_decisions"]
-    DASH["Dashboard metrics"]
-    SAIA["Splunk AI Assistant"]
-    MCP["Splunk MCP Server"]
-    DECIDX --> DASH
-    SAIA --> MCP
+    AuthIdx
+    DecIdx
+    RunIdx["index=trustops_agent_runs<br/>agent_step + analyst_chat"]
+    SAIA["Splunk AI Assistant<br/>REST /predict primary"]
+    MCP["Splunk MCP Server<br/>optional"]
+    Dash["trustops_dashboard.xml"]
+    DecIdx --> Dash
+    RunIdx --> Dash
   end
 
-  subgraph backend["FastAPI port 8001"]
+  subgraph backend["FastAPI backend port 8001"]
     API["REST API"]
-    SDK["Splunk SDK"]
-    SAIAREST["SAIA REST client"]
-    MCPCLI["MCP client optional"]
-    FALLBACK["Deterministic ai_agent fallback"]
-    API --> SDK
-    API --> SAIAREST
-    API --> MCPCLI
-    API --> FALLBACK
-    SDK --> AUTHIDX
-    SDK --> DECIDX
-    SAIAREST --> SAIA
-    MCPCLI --> MCP
+    SDK["Splunk SDK searches + receiver"]
+    PhaseA["Phase A on load<br/>GET /investigation"]
+    PhaseB["Phase B auto-run<br/>POST /agent-run"]
+    SAIAInv["saia_investigation.py"]
+    Orch["7-agent orchestrator"]
+    SAIARest["SAIA REST client"]
+    Fallback["ai_agent.py fallback"]
+    Smoke["startup smoke test"]
+    API --> PhaseA
+    API --> PhaseB
+    PhaseA --> SDK
+    PhaseA --> SAIAInv
+    SAIAInv --> SAIARest
+    SAIAInv --> Fallback
+    PhaseB --> Orch
+    Orch --> SDK
+    Orch --> SAIARest
+    SAIARest --> SAIA
+    API -.->|optional| MCP
   end
 
-  subgraph frontend["React UI port 5173"]
-    Q["Alert queue"]
-    I["Investigation plus SPL and SAIA"]
-    F["Decision form"]
-    M["Metrics panel"]
-    Q --> I --> F --> M
+  subgraph ui["React analyst UI port 5173"]
+    StatusBar["StatusBar<br/>health + 7-step agent timeline"]
+    Queue["Alert queue"]
+    InvPanel["Investigation panel"]
+    SAIABlock["Splunk AI analysis SAIA on load"]
+    Chat["Alert-scoped SAIA chat"]
+    Agents["7 agent callouts + Explain SPL"]
+    Decision["Decision form + bias feedback"]
+    Metrics["Metrics panel"]
   end
 
-  A["SOC analyst"]
-  A --> Q
-  I -->|read| API
-  F -->|POST decisions| API
-  API -->|receiver| DECIDX
+  Analyst["SOC analyst"] --> Queue
+  Analyst --> StatusBar
+  StatusBar -->|"GET /health"| API
+  Queue -->|"select alert"| InvPanel
+  InvPanel --> SAIABlock
+  SAIABlock --> Chat
+  Chat --> Agents
+  InvPanel --> Decision
+  Metrics -->|"GET /decisions/summary"| API
+
+  InvPanel -->|"Phase A"| PhaseA
+  InvPanel -->|"Phase B auto"| PhaseB
+  Chat -->|"POST /chat"| API
+  Decision -->|"POST /decisions"| API
+
+  SDK --> AuthIdx
+  SDK --> DecIdx
+  SDK --> RunIdx
