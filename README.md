@@ -1,3 +1,9 @@
+## License
+
+This project is released under the MIT License. See [`LICENSE.md`](LICENSE.md) for details.
+
+TrustOps is a hackathon prototype and demonstration project. It may reference or integrate with third-party tools, platforms, APIs, datasets, and open-source packages, including Splunk, Splunk AI Assistant, Splunk MCP Server, MITRE ATT&CK, and `mitreattack-python`. Those third-party components remain subject to their own licenses and terms of use.
+
 # TrustOps for Splunk
 
 TrustOps is a **human-in-the-loop agentic security triage assistant** for Splunk. It helps SOC analysts investigate suspicious alerts using Splunk data, **Splunk AI Assistant (SAIA)**, and optional **Splunk MCP Server** tooling, then captures **analyst decision telemetry** (trust, confidence, final decision, and automatically recorded time-to-decision).
