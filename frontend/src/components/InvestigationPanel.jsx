@@ -1,5 +1,4 @@
 import AgentInvestigationSections from "./AgentInvestigationSections.jsx";
-import AlertChatPanel from "./AlertChatPanel.jsx";
 
 function severityBadgeClass(sev) {
   const s = String(sev || "").toLowerCase();
@@ -153,11 +152,6 @@ export default function InvestigationPanel({
               </div>
             ) : null}
           </div>
-
-          <AlertChatPanel
-            alertId={investigation.alert?.alert_id}
-            investigation={investigation}
-          />
 
           <AgentInvestigationSections
             investigation={investigation}

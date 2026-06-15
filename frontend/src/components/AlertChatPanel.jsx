@@ -25,7 +25,7 @@ function sourceLabel(source) {
     : "TrustOps grounded answer";
 }
 
-export default function AlertChatPanel({ alertId, investigation }) {
+export default function AlertChatPanel({ alertId, investigation, variant = "investigation" }) {
   const [input, setInput] = useState("");
   const [conversationId, setConversationId] = useState(null);
   const [exchanges, setExchanges] = useState([]);
@@ -107,8 +107,18 @@ export default function AlertChatPanel({ alertId, investigation }) {
     <div className="alert-chat callout callout--compact callout--ai">
       <div className="callout__label">Splunk AI Assistant</div>
       <p className="alert-chat__intro">
-        Ask follow-up questions about this alert — grounded in Splunk evidence for{" "}
-        <strong>{investigation?.alert?.alert_id || alertId}</strong>.
+        {variant === "decision" ? (
+          <>
+            Ask Splunk AI Assistant to validate evidence, challenge the recommendation, or clarify
+            SOP before you submit your analyst decision for{" "}
+            <strong>{investigation?.alert?.alert_id || alertId}</strong>.
+          </>
+        ) : (
+          <>
+            Ask follow-up questions about this alert — grounded in Splunk evidence for{" "}
+            <strong>{investigation?.alert?.alert_id || alertId}</strong>.
+          </>
+        )}
       </p>
 
       <div className="alert-chat__chips">

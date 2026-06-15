@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { postDecision } from "../api.js";
+import AlertChatPanel from "./AlertChatPanel.jsx";
 
 const EVIDENCE_CHECK_ITEMS = [
   { id: "auth_timeline", label: "Reviewed authentication timeline" },
@@ -238,6 +239,12 @@ export default function DecisionForm({
     <div className="panel panel--decision">
       <div className="panel__header">Analyst decision</div>
       <div className="panel__body panel__body--decision">
+        <AlertChatPanel
+          alertId={alertId}
+          investigation={investigation}
+          variant="decision"
+        />
+
         {hasSubmitted ? (
           <div className="decision-submitted-banner" role="status">
             <strong className="decision-submitted-banner__title">Decision Submitted</strong>
