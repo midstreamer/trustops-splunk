@@ -143,6 +143,8 @@ GitHub Pages hosts the **static UI only**. The FastAPI backend and Splunk must r
 
 **Build-time API URL** (optional): In GitHub → **Settings → Secrets and variables → Actions → Variables**, set **`VITE_API_BASE_URL`** to your public API base URL, then redeploy.
 
+**Railway backend:** See [`docs/railway.md`](docs/railway.md) to deploy FastAPI to Railway and point GitHub Pages at the Railway URL.
+
 Local Pages-style build:
 
 ```bash
@@ -233,6 +235,9 @@ Then open Splunk at `http://localhost:8000`, set the time picker to **Last 7 day
 | `scripts/smoke_test.sh` | CLI wrapper: `npm run smoke-test` / `smoke-test:full`. |
 | `package.json` | Root scripts: `dev:api`, `dev:frontend`, `smoke-test`, `smoke-test:full`. |
 | `scripts/start_backend.sh` | Start API with `.env`, venv bootstrap, and startup smoke test. |
+| `Dockerfile` | Container image for Railway / cloud deploy (backend + `sample_alerts.json`). |
+| `railway.toml` | Railway build and health-check settings. |
+| `docs/railway.md` | Deploy FastAPI to Railway; connect GitHub Pages UI. |
 | `docs/configure_splunk_mcp_server.md` | Splunk MCP Server setup, tokens, and Cursor client notes. |
 | `frontend/` | **Phase 3** Vite + React analyst console. |
 | `architecture.mmd` | Mermaid architecture diagram (repo root). |

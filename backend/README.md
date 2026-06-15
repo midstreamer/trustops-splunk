@@ -98,6 +98,10 @@ uvicorn app:app --reload --host 0.0.0.0 --port 8001
 
 Password file alternative: `echo 'your-password' > ~/.splunk_pass && chmod 600 ~/.splunk_pass` then set only `SPLUNK_USER` in `.env`.
 
+### Deploy to Railway (public API)
+
+Railway can host this FastAPI service for use with the GitHub Pages UI. Splunk must still be reachable from Railway (tunnel or Splunk Cloud)—see **[`docs/railway.md`](../docs/railway.md)**.
+
 API docs: `http://localhost:8001/docs`
 
 ## Quick test URLs
