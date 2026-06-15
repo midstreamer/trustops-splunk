@@ -6,6 +6,7 @@
   "scripts": {
     "dev:frontend": "npm run dev --prefix frontend",
     "build:frontend": "npm run build --prefix frontend",
+    "build:pages": "npm run build:pages --prefix frontend",
     "dev:api": "bash scripts/start_backend.sh",
     "smoke-test": "bash scripts/smoke_test.sh",
     "smoke-test:full": "bash scripts/smoke_test.sh --full"

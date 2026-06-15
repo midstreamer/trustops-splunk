@@ -118,6 +118,28 @@ Create the index with `scripts/setup_splunk_indexes.sh` (includes `trustops_agen
 - **Narrative:** [`docs/architecture.md`](docs/architecture.md) — plain-language description of components and data flow.
 - **Submission draft:** [`docs/devpost_submission.md`](docs/devpost_submission.md) — polished project story for Devpost / judges.
 
+## GitHub Pages (live UI)
+
+The React analyst console is published automatically on every push to **`main`**:
+
+**https://midstreamer.github.io/trustops-splunk/**
+
+Workflow: [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) builds `frontend/` with `VITE_BASE_PATH=/trustops-splunk/` and deploys to GitHub Pages.
+
+GitHub Pages hosts the **static UI only**. The FastAPI backend and Splunk must run elsewhere (local machine, VM, or cloud). To connect the hosted UI to your API:
+
+1. In GitHub → **Settings → Secrets and variables → Actions → Variables**, set **`VITE_API_BASE_URL`** to your public API base URL (e.g. `https://api.example.com`, no trailing slash).
+2. Re-run the deploy workflow or push to `main` so the build picks up the variable.
+3. On the backend, allow your Pages origin via **`TRUSTOPS_CORS_ORIGINS`** if needed (default includes `https://midstreamer.github.io`).
+
+Local Pages-style build:
+
+```bash
+cd frontend
+VITE_BASE_PATH=/trustops-splunk/ npm run build
+npm run preview -- --base /trustops-splunk/
+```
+
 ## Canonical demo story
 
 All hackathon docs, sample data, SPL, and the UI should align on:

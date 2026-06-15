@@ -42,6 +42,22 @@ class Settings(BaseSettings):
     saia_chat_timeout_seconds: float = Field(default=90.0)
     saia_predict_poll_interval_seconds: float = Field(default=1.0)
 
+    # Comma-separated extra CORS origins (e.g. GitHub Pages: https://midstreamer.github.io)
+    trustops_cors_origins: str = Field(default="")
+
+    def cors_origins(self) -> list[str]:
+        defaults = [
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "https://midstreamer.github.io",
+        ]
+        extra = [
+            o.strip()
+            for o in self.trustops_cors_origins.split(",")
+            if o.strip()
+        ]
+        return list(dict.fromkeys(defaults + extra))
+
     def splunk_base_url(self) -> str:
         return f"{self.splunk_scheme}://{self.splunk_host}:{self.splunk_port}"
 
