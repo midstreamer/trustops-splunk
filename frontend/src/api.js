@@ -1,9 +1,16 @@
 /**
- * TrustOps API client. Base URL from Vite env (default: local FastAPI).
+ * TrustOps API client. Base URL from runtime config, build env, or localhost.
  */
 
-const baseUrl = () =>
-  (import.meta.env.VITE_API_BASE_URL || "http://localhost:8001").replace(/\/$/, "");
+import {
+  getApiBaseUrl,
+  getApiConnectionErrorMessage,
+  initApiConfigFromUrl,
+} from "./apiConfig.js";
+
+initApiConfigFromUrl();
+
+const baseUrl = () => getApiBaseUrl();
 
 async function request(path, options = {}) {
   const url = `${baseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
@@ -20,9 +27,7 @@ async function request(path, options = {}) {
     res = await fetch(url, init);
   } catch (err) {
     const msg =
-      err instanceof TypeError
-        ? "Cannot reach the TrustOps API. Is the backend running on port 8001?"
-        : String(err?.message || err);
+      err instanceof TypeError ? getApiConnectionErrorMessage() : String(err?.message || err);
     throw new Error(msg);
   }
   const text = await res.text();

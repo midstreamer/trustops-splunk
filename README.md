@@ -132,11 +132,16 @@ The React analyst console is published automatically on every push to **`main`**
 
 Workflow: [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml) builds `frontend/` with `VITE_BASE_PATH=/trustops-splunk/` and deploys to GitHub Pages.
 
-GitHub Pages hosts the **static UI only**. The FastAPI backend and Splunk must run elsewhere (local machine, VM, or cloud). To connect the hosted UI to your API:
+GitHub Pages hosts the **static UI only**. The FastAPI backend and Splunk must run on a reachable host (your laptop, VM, or cloud).
 
-1. In GitHub → **Settings → Secrets and variables → Actions → Variables**, set **`VITE_API_BASE_URL`** to your public API base URL (e.g. `https://api.example.com`, no trailing slash).
-2. Re-run the deploy workflow or push to `main` so the build picks up the variable.
-3. On the backend, allow your Pages origin via **`TRUSTOPS_CORS_ORIGINS`** if needed (default includes `https://midstreamer.github.io`).
+**From another device** (phone, second PC, GitHub Pages URL):
+
+1. Start the backend bound to all interfaces: `uvicorn app:app --host 0.0.0.0 --port 8001`
+2. On the hosted UI, use the **Backend connection required** banner to enter your API URL, e.g. `http://192.168.1.10:8001` (your machine's LAN IP), or open:
+   `https://midstreamer.github.io/trustops-splunk/?api=http://YOUR_SERVER:8001`
+3. Ensure the backend allows CORS from `https://midstreamer.github.io` (default in `backend/config.py`).
+
+**Build-time API URL** (optional): In GitHub → **Settings → Secrets and variables → Actions → Variables**, set **`VITE_API_BASE_URL`** to your public API base URL, then redeploy.
 
 Local Pages-style build:
 

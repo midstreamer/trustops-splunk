@@ -5,6 +5,7 @@ import DecisionForm from "./components/DecisionForm.jsx";
 import InvestigationPanel from "./components/InvestigationPanel.jsx";
 import MetricsPanel from "./components/MetricsPanel.jsx";
 import StatusBar from "./components/StatusBar.jsx";
+import HostedApiBanner from "./components/HostedApiBanner.jsx";
 import { useAgentPlanRun } from "./components/AgentPlanPanel.jsx";
 import { getAlerts, getInvestigation } from "./api.js";
 
@@ -108,6 +109,8 @@ export default function App() {
         <h1>TrustOps for Splunk</h1>
         <p className="subtitle">Human-in-the-loop agentic triage for security operations</p>
       </header>
+
+      <HostedApiBanner />
 
       <StatusBar
         refreshKey={refreshKey}
