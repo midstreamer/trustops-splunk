@@ -68,8 +68,8 @@ export function getApiConnectionErrorMessage() {
   if (usesMisconfiguredApi()) {
     return (
       "TrustOps API is not configured for this hosted UI. " +
-      "Enter your backend URL in the banner above (for example http://YOUR_SERVER:8001), " +
-      "or open this app from the machine running the API at http://localhost:5173."
+      "Set the VITE_API_BASE_URL build variable, open with ?api=https://YOUR_API, " +
+      "or run locally at http://localhost:5173."
     );
   }
   return `Cannot reach the TrustOps API at ${getApiBaseUrl()}. Is the backend running and reachable from this device?`;

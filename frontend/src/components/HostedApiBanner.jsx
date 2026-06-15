@@ -2,13 +2,12 @@ import { useState } from "react";
 import {
   getApiBaseUrl,
   getStoredApiBaseUrl,
-  isGithubPagesHost,
   setStoredApiBaseUrl,
   usesMisconfiguredApi,
 } from "../apiConfig.js";
 
 export default function HostedApiBanner() {
-  const show = isGithubPagesHost() || usesMisconfiguredApi();
+  const show = usesMisconfiguredApi();
   const [draft, setDraft] = useState(() => getStoredApiBaseUrl() || "");
   const [error, setError] = useState(null);
 
